@@ -40,6 +40,11 @@ class Person:
             raise RuntimeError(f"{method} failed: {r}")
         return r
 
+    def download(self, url: str) -> bytes:
+        """Fetches a file URL (url_private) with this person's session."""
+        with self.opener.open(url) as res:
+            return res.read()
+
     def channel_id(self, name: str) -> str:
         chans = self.api("users.conversations", types="public_channel,private_channel")["channels"]
         return next(c["id"] for c in chans if c.get("name") == name)
@@ -146,7 +151,16 @@ def manifest(name: str, *, socket_mode: bool, request_url: str | None = None, co
         },
         "oauth_config": {
             "scopes": {
-                "bot": ["chat:write", "channels:history", "channels:read", "app_mentions:read", "users:read", "commands"]
+                "bot": [
+                    "chat:write",
+                    "channels:history",
+                    "channels:read",
+                    "app_mentions:read",
+                    "users:read",
+                    "commands",
+                    "files:write",
+                    "files:read",
+                ]
             }
         },
         "settings": {"event_subscriptions": events, "interactivity": interactivity, "socket_mode_enabled": socket_mode},

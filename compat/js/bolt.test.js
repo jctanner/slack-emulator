@@ -27,6 +27,15 @@ function handlers(app, prefix) {
   app.message('ping', async ({ say }) => {
     await say('pong')
   })
+  app.message('report please', async ({ message, client }) => {
+    await client.files.uploadV2({
+      channel_id: message.channel,
+      content: 'name,count\nwidgets,3\n',
+      filename: 'report.csv',
+      title: 'Widget report',
+      initial_comment: "Here's the report",
+    })
+  })
   app.event('app_mention', async ({ event, say }) => {
     await say({ text: `hi <@${event.user}>`, thread_ts: event.ts })
   })
@@ -84,6 +93,14 @@ async function exercise(person, botUser, prefix) {
   })
   assert.equal(reply.thread_ts, asked.ts)
   assert.equal(reply.bot_profile.user_id, botUser)
+
+  // files.uploadV2: three steps (get URL, multipart POST, complete), then a file_share message.
+  await person.api('chat.postMessage', { channel: general, text: 'report please' })
+  const shared = await person.waitForMessage(general, (m) => m.user === botUser && m.files)
+  assert.equal(shared.text, "Here's the report")
+  const f = shared.files[0]
+  assert.deepEqual([f.name, f.title, f.filetype], ['report.csv', 'Widget report', 'csv'])
+  assert.equal((await person.download(f.url_private_download)).toString(), 'name,count\nwidgets,3\n')
 
   // Slash command answered through the response URL.
   await person.api('chat.command', { channel: general, command: `/${prefix}-echo`, text: 'hello' })

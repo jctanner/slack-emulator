@@ -61,11 +61,27 @@ export type Message = {
   client_msg_id?: string
   parent_user_id?: string
   hidden?: boolean
+  files?: SlackFile[]
   /** Shown only to this user, until reload (`chat.postEphemeral`, slash command replies). */
   is_ephemeral?: boolean
   /** Client-side: sent but not yet confirmed, or failed to send. */
   pending?: boolean
   failed?: boolean
+}
+
+/** A file on a message; deleted files keep only `id` and `mode: 'tombstone'`. */
+export type SlackFile = {
+  id: string
+  mode?: string
+  name?: string
+  title?: string
+  mimetype?: string
+  filetype?: string
+  pretty_type?: string
+  size?: number
+  alt_txt?: string
+  url_private?: string
+  url_private_download?: string
 }
 
 /** A Block Kit block or element. Shapes vary by `type`, so fields are loose. */

@@ -146,7 +146,7 @@ pub(crate) fn content(args: &Args) -> ApiResult<Content> {
 }
 
 /// Creates a message from the caller in `conv`.
-fn new_message(state: &AppState, caller: &Caller, conv: &Conversation, text: String) -> ApiResult<Message> {
+pub(super) fn new_message(state: &AppState, caller: &Caller, conv: &Conversation, text: String) -> ApiResult<Message> {
     let user = caller.user()?;
     let token = caller.token.as_ref();
     Ok(build_message(
@@ -201,12 +201,13 @@ pub(crate) fn build_message(
         reply_broadcast: false,
         edited_ts: None,
         edited_by: None,
+        file_ids: Vec::new(),
     }
 }
 
 /// Whether the caller may post to this conversation: members can, and bots
 /// with `chat:write.public` can post to any public channel.
-fn require_can_post(caller: &Caller, a: &Access) -> ApiResult<()> {
+pub(super) fn require_can_post(caller: &Caller, a: &Access) -> ApiResult<()> {
     let public_ok = !caller.is_session()
         && a.conv.is_channel()
         && !a.conv.is_private

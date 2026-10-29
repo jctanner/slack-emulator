@@ -1,7 +1,8 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import type { Message } from './api'
+import type { Message, SlackFile } from './api'
 import { useWs } from './context'
 import { MessageBlocks, type Container } from './BlockKit'
+import { formatSize } from './Composer'
 import { EmojiPicker } from './EmojiPicker'
 import { emojiChar } from './emoji'
 import { Mrkdwn, decodeForEdit, displayName, encodeOutgoing, type MrkdwnContext } from './mrkdwn'
@@ -302,7 +303,7 @@ function MessageRow({
               </>
             ) : (
               <>
-                {(msg.text || !msg.attachments?.length) && (
+                {(msg.text || (!msg.attachments?.length && !msg.files?.length)) && (
                   <Mrkdwn text={msg.text} ctx={ctx} suffix={msg.edited && <span className="edited">(edited)</span>} />
                 )}
                 {!!msg.attachments?.length && (
@@ -312,6 +313,7 @@ function MessageRow({
             )}
           </div>
         )}
+        {!!msg.files?.length && <Files files={msg.files} />}
         {msg.failed && msg.client_msg_id && (
           <div className="failed-note">
             Message failed to send.{' '}
@@ -440,6 +442,57 @@ function EditBox({ channel, msg, onDone }: { channel: string; msg: Message; onDo
           Save
         </button>
       </div>
+    </div>
+  )
+}
+
+const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+
+/** A file URL relative to this page, so the session cookie goes with it whatever host PUBLIC_URL names. */
+function local(url?: string) {
+  if (!url) return undefined
+  const u = new URL(url)
+  return u.pathname + u.search
+}
+
+function fileIcon(f: SlackFile) {
+  if (f.mimetype?.startsWith('image/')) return '🖼︎'
+  if (f.filetype === 'pdf') return '📕︎'
+  if (['zip', 'gzip'].includes(f.filetype ?? '')) return '🗜︎'
+  if (['binary'].includes(f.filetype ?? '')) return '📦︎'
+  return '📄︎'
+}
+
+function Files({ files }: { files: SlackFile[] }) {
+  return (
+    <div className="msg-files">
+      {files.map((f) =>
+        f.mode === 'tombstone' ? (
+          <div key={f.id} className="file-card tombstone">
+            This file was deleted.
+          </div>
+        ) : INLINE_IMAGES.includes(f.mimetype ?? '') ? (
+          <a key={f.id} className="file-image" href={local(f.url_private)} target="_blank" rel="noreferrer" title={f.title}>
+            <img src={local(f.url_private)} alt={f.alt_txt || f.title || f.name} loading="lazy" />
+          </a>
+        ) : (
+          <a key={f.id} className="file-card" href={local(f.url_private_download)} download={f.name}>
+            <span className="file-icon" aria-hidden>
+              {fileIcon(f)}
+            </span>
+            <span className="file-meta">
+              <span className="file-title">{f.title || f.name}</span>
+              <span className="muted small">
+                {f.pretty_type}
+                {f.size !== undefined && ` · ${formatSize(f.size)}`}
+              </span>
+            </span>
+            <span className="file-download" aria-hidden>
+              ⤓
+            </span>
+          </a>
+        ),
+      )}
     </div>
   )
 }

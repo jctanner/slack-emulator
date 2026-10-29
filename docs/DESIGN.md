@@ -392,6 +392,25 @@ docs/
   - The harness's API log is written when a call returns, so it can trail
     the events the call caused by a moment. Waiting on events is the
     reliable signal.
+- Milestone 7, files (2026-10-29):
+  - The modern flow only: `files.getUploadURLExternal`, a POST of the bytes
+    to the upload URL (raw, as `slack_sdk` sends, or multipart, as the Node
+    SDK sends), then `files.completeUploadExternal`. `files.upload` answers
+    `method_deprecated`, matching Slack since its retirement in 2025.
+  - File bytes live in the database (`file_contents`), on both backends, so
+    the one-container setup stays one container. The size limit is
+    `EMU_MAX_FILE_BYTES` (50 MiB by default).
+  - Messages record their file IDs, so a deleted file shows Slack's
+    `{"id", "mode": "tombstone"}` instead of vanishing.
+  - `url_private` needs a token with `files:read` or a session. Visibility
+    follows conversations: the uploader, members, and people (not bots) for
+    public channels. Without credentials the emulator answers 401 JSON,
+    where Slack serves an HTML sign-in page.
+  - Only PNG, JPEG, GIF and WebP are served inline. Everything else
+    downloads as an attachment with `Content-Security-Policy: sandbox`, so an
+    uploaded page can't run scripts on the emulator's origin.
+  - Events: `file_shared` (per channel) and `file_deleted`. `file_created`,
+    file comments, remote files and public file links aren't emulated.
 - `client.counts` (an undocumented method from Slack's own web client) drives
   the unread state in the sidebar. Events Slack doesn't have are prefixed
   `emu_` and are never delivered to apps.

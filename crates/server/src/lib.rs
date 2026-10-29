@@ -110,6 +110,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api", api::routes())
         .nest("/ws", ws::routes().merge(socket_mode::routes()))
         .nest("/hooks", interactions::routes())
+        .merge(api::files::routes(&state))
         .nest("/_emu", harness::routes(state.clone()))
         .route("/archives/{channel}/{p}", get(permalink))
         .fallback(web::static_handler)

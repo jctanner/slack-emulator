@@ -173,6 +173,9 @@ pub struct Message {
     pub reply_broadcast: bool,
     pub edited_ts: Option<String>,
     pub edited_by: Option<String>,
+    /// Files posted with the message (`file_share`).
+    #[serde(default)]
+    pub file_ids: Vec<String>,
 }
 
 impl Message {
@@ -242,4 +245,35 @@ impl App {
     pub fn is_installed(&self) -> bool {
         self.installed_at.is_some()
     }
+}
+
+/// An uploaded file. Its bytes are stored separately.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct File {
+    pub id: String,
+    pub team_id: String,
+    /// The uploader (a person or a bot user).
+    pub user_id: String,
+    pub bot_id: Option<String>,
+    pub name: String,
+    pub title: String,
+    pub mimetype: String,
+    pub filetype: String,
+    pub snippet_type: Option<String>,
+    pub alt_txt: Option<String>,
+    pub size: i64,
+    pub created: i64,
+    pub upload_token: Option<String>,
+    /// The bytes have arrived.
+    pub uploaded: bool,
+    /// `files.completeUploadExternal` has been called.
+    pub completed: bool,
+}
+
+/// Where a file was posted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileShare {
+    pub file_id: String,
+    pub channel_id: String,
+    pub ts: String,
 }

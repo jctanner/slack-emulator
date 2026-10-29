@@ -1033,7 +1033,7 @@ button.primary-small {
 .composer-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 2px 6px 6px 12px;
   gap: 8px;
 }
@@ -1669,6 +1669,121 @@ button.primary-small {
 }
 
 /* ---------- mobile: one pane at a time ---------- */
+
+/* ---------- files ---------- */
+
+.msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 360px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+}
+
+.file-card:hover {
+  background: var(--hover);
+}
+
+.file-card.tombstone {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.file-icon {
+  font-size: 24px;
+}
+
+.file-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-download {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.file-image img {
+  display: block;
+  max-width: min(100%, 360px);
+  max-height: 280px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.attachments {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px 0;
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 3px 4px 3px 10px;
+  font-size: 14px;
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip button {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  padding: 0 6px;
+}
+
+.composer-box.dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+.composer-bar .send {
+  margin-left: auto;
+}
+
+.composer-bar .attach {
+  border: 0;
+  background: none;
+  font-size: 18px;
+  padding: 2px 6px;
+  color: var(--muted);
+}
 
 /* ---------- inspector ---------- */
 

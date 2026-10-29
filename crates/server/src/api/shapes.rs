@@ -203,6 +203,9 @@ pub async fn messages(state: &AppState, channel_id: &str, msgs: &[Message]) -> A
         }
     }
 
+    // Files, by ID; a message naming a deleted one shows a tombstone.
+    let files = super::files::files_for_messages(state, msgs).await?;
+
     // Bot messages carry their bot's profile.
     let mut bots: HashMap<String, Option<Value>> = HashMap::new();
     for bot_id in msgs.iter().filter_map(|m| m.bot_id.as_ref()) {
@@ -227,6 +230,20 @@ pub async fn messages(state: &AppState, channel_id: &str, msgs: &[Message]) -> A
             }
             if let Some(Some(profile)) = m.bot_id.as_ref().and_then(|b| bots.get(b)) {
                 v["bot_profile"] = profile.clone();
+            }
+            if !m.file_ids.is_empty() {
+                v["files"] = m
+                    .file_ids
+                    .iter()
+                    .map(|id| {
+                        files
+                            .get(id)
+                            .cloned()
+                            .unwrap_or_else(|| json!({"id": id, "mode": "tombstone"}))
+                    })
+                    .collect();
+                v["upload"] = json!(false);
+                v["display_as_bot"] = json!(false);
             }
             v
         })

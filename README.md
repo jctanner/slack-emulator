@@ -6,7 +6,7 @@ use it through a Slack-like web UI in any desktop or mobile browser.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the architecture and roadmap.
 
-**Status: milestone 6 (Postgres).** Accounts and multiple workspaces;
+**Status: milestone 7 in progress (files done).** Accounts and multiple workspaces;
 public and private channels, DMs and group DMs, threads, reactions, unread
 tracking and live updates in a responsive web UI. Apps are created from Slack
 app manifests and installed for bot tokens with enforced scopes. Events are
@@ -26,6 +26,7 @@ Web API methods:
 - `apps.connections.open`, `apps.manifest.create|update|delete|export|validate`
 - `chat.postMessage`, `chat.postEphemeral`, `chat.update`, `chat.delete`, `chat.meMessage`, `chat.getPermalink`
 - `conversations.archive|close|create|history|info|invite|join|kick|leave|list|mark|members|open|rename|replies|setPurpose|setTopic|unarchive`
+- `files.getUploadURLExternal|completeUploadExternal|info|list|delete` (what `files_upload_v2` / `files.uploadV2` use; the retired `files.upload` answers `method_deprecated`, as on Slack)
 - `reactions.add|get|remove`
 - `users.conversations|info|list|lookupByEmail|profile.get`
 - `views.open|push|update|publish`
@@ -33,7 +34,8 @@ Web API methods:
 Events API: `message.channels|groups|im|mpim`, `app_mention`,
 `reaction_added|removed`, `member_joined_channel|member_left_channel`,
 `channel_*`/`group_*` lifecycle events, `im_created`, `team_join`,
-`user_change`, `app_home_opened` and `app_uninstalled`.
+`user_change`, `app_home_opened`, `app_uninstalled`, `file_shared` and
+`file_deleted`.
 
 Interactivity: `block_actions` (messages, ephemeral messages, modals, App
 Home), `view_submission` (with `response_action` `errors`, `update`, `push`
@@ -49,8 +51,15 @@ file inputs and workflow buttons render but don't work.
 Storage is SQLite by default or Postgres, with the same behaviour (the
 whole test suite runs on both).
 
-Next up (milestone 7): files, an OAuth install flow, OIDC sign-in, search and
-the other extras in [the roadmap](docs/DESIGN.md#milestones).
+Files can be uploaded by bots and people (attach, paste or drag into the
+composer), and are shown in messages: images inline, other files as download
+cards. `url_private` downloads need a token with `files:read` or a signed-in
+session, as on Slack (the emulator answers 401 rather than Slack's login
+page).
+
+Next up in milestone 7: `external_select` options and shortcuts, then pins,
+bookmarks, scheduled messages, user groups and search; OAuth, OIDC sign-in
+and retention policies last (see [the roadmap](docs/DESIGN.md#milestones)).
 
 ## Run it
 
@@ -114,6 +123,7 @@ A release build embeds `web/dist` into the binary, so run `npm run build` in
 | `EMU_SESSION_TTL_SECS` | `2592000` (30 days) | |
 | `EMU_EVENT_RETRY_DELAYS` | `1,60,300` | seconds before each Events API retry; empty disables retries |
 | `EMU_ADMIN_TOKEN` | unset | turns on the test harness at `/_emu/*`; send it as a bearer token |
+| `EMU_MAX_FILE_BYTES` | `52428800` (50 MiB) | largest file upload; files are stored in the database |
 | `EMU_SEED_FILE` | unset | fixture (YAML or JSON) to load at startup when the database has no users |
 | `EMU_RATE_LIMITS` | `false` | start with Slack-like rate limits on (toggle at runtime with `/_emu/rate-limits`) |
 | `EMU_TRIGGER_TTL` | `3` | seconds a `trigger_id` stays usable; raise it while stepping through a bot in a debugger |

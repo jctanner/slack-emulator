@@ -15,8 +15,8 @@ macro_rules! sql_store {
         use serde_json::Value;
         use slack_emu_core::ids::{IdKind, TokenKind, new_id, new_internal_id};
         use slack_emu_core::models::{
-            Account, ApiToken, App, Conversation, ConversationCounts, Message, NewConversation, NewUser, Reaction,
-            ThreadSummary, Topic, User, Workspace,
+            Account, ApiToken, App, Conversation, ConversationCounts, File, FileShare, Message, NewConversation,
+            NewUser, Reaction, ThreadSummary, Topic, User, Workspace,
         };
         use slack_emu_core::now;
         use sqlx::{Arguments, Row};
@@ -163,6 +163,31 @@ macro_rules! sql_store {
                 reply_broadcast: r.get("reply_broadcast"),
                 edited_ts: r.get("edited_ts"),
                 edited_by: r.get("edited_by"),
+                file_ids: split_list(&r.get::<String, _>("file_ids")),
+            }
+        }
+
+        fn split_list(s: &str) -> Vec<String> {
+            s.split(',').filter(|x| !x.is_empty()).map(str::to_owned).collect()
+        }
+
+        fn file_row(r: $row) -> File {
+            File {
+                id: r.get("id"),
+                team_id: r.get("team_id"),
+                user_id: r.get("user_id"),
+                bot_id: r.get("bot_id"),
+                name: r.get("name"),
+                title: r.get("title"),
+                mimetype: r.get("mimetype"),
+                filetype: r.get("filetype"),
+                snippet_type: r.get("snippet_type"),
+                alt_txt: r.get("alt_txt"),
+                size: r.get("size"),
+                created: r.get("created"),
+                upload_token: r.get("upload_token"),
+                uploaded: r.get("uploaded"),
+                completed: r.get("completed"),
             }
         }
 
@@ -582,6 +607,9 @@ macro_rules! sql_store {
                 for table in [
                     "sessions",
                     "identities",
+                    "file_shares",
+                    "file_contents",
+                    "files",
                     "reactions",
                     "messages",
                     "conversation_members",
@@ -947,8 +975,8 @@ macro_rules! sql_store {
                 sqlx::query(
                     prep("INSERT INTO messages (channel_id, ts, team_id, user_id, bot_id, app_id, subtype, text, blocks,
                                            attachments, username, icons, metadata, client_msg_id, thread_ts,
-                                           reply_broadcast, edited_ts, edited_by)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+                                           reply_broadcast, edited_ts, edited_by, file_ids)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
                 )
                 .bind(&m.channel_id)
                 .bind(&m.ts)
@@ -968,6 +996,7 @@ macro_rules! sql_store {
                 .bind(m.reply_broadcast)
                 .bind(&m.edited_ts)
                 .bind(&m.edited_by)
+                .bind(m.file_ids.join(","))
                 .execute(&mut *tx)
                 .await
                 .map_err(conflict("ts"))?;
@@ -1086,6 +1115,151 @@ macro_rules! sql_store {
                     .fetch_one(&self.pool)
                     .await?
                     .get("ts"))
+            }
+
+            async fn create_file(&self, f: &File) -> Result<()> {
+                sqlx::query(prep(
+                    "INSERT INTO files (id, team_id, user_id, bot_id, name, title, mimetype, filetype, snippet_type,
+                                        alt_txt, size, created, upload_token, uploaded, completed)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ))
+                .bind(&f.id)
+                .bind(&f.team_id)
+                .bind(&f.user_id)
+                .bind(&f.bot_id)
+                .bind(&f.name)
+                .bind(&f.title)
+                .bind(&f.mimetype)
+                .bind(&f.filetype)
+                .bind(&f.snippet_type)
+                .bind(&f.alt_txt)
+                .bind(f.size)
+                .bind(f.created)
+                .bind(&f.upload_token)
+                .bind(f.uploaded)
+                .bind(f.completed)
+                .execute(&self.pool)
+                .await
+                .map_err(conflict("file"))?;
+                Ok(())
+            }
+
+            async fn get_file(&self, id: &str) -> Result<Option<File>> {
+                Ok(sqlx::query(prep("SELECT * FROM files WHERE id = ?"))
+                    .bind(id)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .map(file_row))
+            }
+
+            async fn get_files(&self, ids: &[String]) -> Result<Vec<File>> {
+                if ids.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let sql = format!("SELECT * FROM files WHERE id IN ({})", placeholders(ids.len()));
+                let mut q = sqlx::query(prep(&sql));
+                for id in ids {
+                    q = q.bind(id);
+                }
+                Ok(q.fetch_all(&self.pool).await?.into_iter().map(file_row).collect())
+            }
+
+            async fn file_by_upload_token(&self, token: &str) -> Result<Option<File>> {
+                Ok(sqlx::query(prep("SELECT * FROM files WHERE upload_token = ?"))
+                    .bind(token)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .map(file_row))
+            }
+
+            async fn update_file(&self, f: &File) -> Result<()> {
+                sqlx::query(prep(
+                    "UPDATE files SET title = ?, size = ?, upload_token = ?, uploaded = ?, completed = ? WHERE id = ?",
+                ))
+                .bind(&f.title)
+                .bind(f.size)
+                .bind(&f.upload_token)
+                .bind(f.uploaded)
+                .bind(f.completed)
+                .bind(&f.id)
+                .execute(&self.pool)
+                .await?;
+                Ok(())
+            }
+
+            async fn set_file_data(&self, id: &str, data: &[u8]) -> Result<()> {
+                sqlx::query(prep(
+                    "INSERT INTO file_contents (file_id, data) VALUES (?, ?)
+                     ON CONFLICT (file_id) DO UPDATE SET data = excluded.data",
+                ))
+                .bind(id)
+                .bind(data)
+                .execute(&self.pool)
+                .await?;
+                Ok(())
+            }
+
+            async fn file_data(&self, id: &str) -> Result<Option<Vec<u8>>> {
+                Ok(sqlx::query_scalar(prep("SELECT data FROM file_contents WHERE file_id = ?"))
+                    .bind(id)
+                    .fetch_optional(&self.pool)
+                    .await?)
+            }
+
+            async fn delete_file(&self, id: &str) -> Result<()> {
+                sqlx::query(prep("DELETE FROM files WHERE id = ?"))
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+                Ok(())
+            }
+
+            async fn list_files(&self, team_id: &str) -> Result<Vec<File>> {
+                Ok(sqlx::query(prep(
+                    "SELECT * FROM files WHERE team_id = ? AND completed = TRUE ORDER BY created DESC, id DESC",
+                ))
+                .bind(team_id)
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(file_row)
+                .collect())
+            }
+
+            async fn add_file_share(&self, share: &FileShare) -> Result<()> {
+                sqlx::query(prep(
+                    "INSERT INTO file_shares (file_id, channel_id, ts) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+                ))
+                .bind(&share.file_id)
+                .bind(&share.channel_id)
+                .bind(&share.ts)
+                .execute(&self.pool)
+                .await?;
+                Ok(())
+            }
+
+            async fn file_shares(&self, file_ids: &[String]) -> Result<Vec<FileShare>> {
+                if file_ids.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let sql = format!(
+                    "SELECT * FROM file_shares WHERE file_id IN ({}) ORDER BY ts",
+                    placeholders(file_ids.len())
+                );
+                let mut q = sqlx::query(prep(&sql));
+                for id in file_ids {
+                    q = q.bind(id);
+                }
+                Ok(q
+                    .fetch_all(&self.pool)
+                    .await?
+                    .into_iter()
+                    .map(|r| FileShare {
+                        file_id: r.get("file_id"),
+                        channel_id: r.get("channel_id"),
+                        ts: r.get("ts"),
+                    })
+                    .collect())
             }
 
             async fn add_reaction(&self, channel_id: &str, ts: &str, name: &str, user_id: &str) -> Result<bool> {

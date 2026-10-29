@@ -216,6 +216,31 @@ export class WorkspaceStore {
     }
   }
 
+  /**
+   * Uploads files the way the SDKs do (get an upload URL, POST the bytes,
+   * complete) and shares them in the conversation with `text` as the comment.
+   */
+  async sendFiles(channel: string, text: string, files: File[], opts: { thread_ts?: string } = {}) {
+    const uploaded: { id: string; title: string }[] = []
+    for (const file of files) {
+      const r = await this.call<{ upload_url: string; file_id: string }>('files.getUploadURLExternal', {
+        filename: file.name,
+        length: file.size,
+      })
+      // Same origin as the page, whatever host PUBLIC_URL names.
+      const url = new URL(r.upload_url)
+      const res = await fetch(url.pathname, { method: 'POST', body: file, credentials: 'same-origin' })
+      if (!res.ok) throw new Error(res.status === 413 ? `${file.name} is too large` : `Upload failed (${res.status})`)
+      uploaded.push({ id: r.file_id, title: file.name })
+    }
+    await this.call('files.completeUploadExternal', {
+      files: uploaded,
+      channel_id: channel,
+      initial_comment: text || undefined,
+      thread_ts: opts.thread_ts,
+    })
+  }
+
   discardFailed(channel: string, client_msg_id: string, thread_ts?: string) {
     const key = thread_ts ? `${channel}/${thread_ts}` : channel
     const kind = thread_ts ? 'threads' : 'channels'
@@ -333,6 +358,23 @@ export class WorkspaceStore {
       }
       case 'emu_ephemeral_deleted':
         return this.dismissEphemeral(ev.channel, ev.ts)
+      case 'file_deleted':
+        // Messages keep showing that a file was there.
+        this.set((st) => {
+          const tomb = (list?: MessageList) =>
+            list && {
+              ...list,
+              msgs: list.msgs.map((m) =>
+                m.files?.some((f) => f.id === ev.file_id)
+                  ? { ...m, files: m.files.map((f) => (f.id === ev.file_id ? { id: f.id, mode: 'tombstone' } : f)) }
+                  : m,
+              ),
+            }
+          const channels = Object.fromEntries(Object.entries(st.channels).map(([k, v]) => [k, tomb(v)!]))
+          const threads = Object.fromEntries(Object.entries(st.threads).map(([k, v]) => [k, tomb(v)!]))
+          return { channels, threads }
+        })
+        return
       case 'emu_modals':
         this.set(() => ({ modals: ev.views }))
         return

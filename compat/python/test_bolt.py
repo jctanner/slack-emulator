@@ -38,6 +38,16 @@ def build_bolt(token: str, prefix: str, signing_secret: str | None = None) -> Ap
     def pong(say):
         say("pong")
 
+    @app.message("report please")
+    def report(message, client):
+        client.files_upload_v2(
+            channel=message["channel"],
+            content="name,count\nwidgets,3\n",
+            filename="report.csv",
+            title="Widget report",
+            initial_comment="Here's the report",
+        )
+
     @app.event("app_mention")
     def mention(event, say):
         say(text=f"hi <@{event['user']}>", thread_ts=event["ts"])
@@ -108,6 +118,14 @@ def exercise(person: Person, bot_user: str, prefix: str):
     )
     assert reply["thread_ts"] == asked["ts"]
     assert reply["bot_profile"]["user_id"] == bot_user
+
+    # files_upload_v2: three steps (get URL, raw POST, complete), then a file_share message.
+    person.api("chat.postMessage", channel=general, text="report please")
+    shared = person.wait_for_message(general, lambda m: m.get("user") == bot_user and m.get("files"))
+    assert shared["text"] == "Here's the report"
+    f = shared["files"][0]
+    assert (f["name"], f["title"], f["filetype"]) == ("report.csv", "Widget report", "csv")
+    assert person.download(f["url_private_download"]) == b"name,count\nwidgets,3\n"
 
     # Slash command answered through the response URL.
     person.api("chat.command", channel=general, command=f"/{prefix}-echo", text="hello")

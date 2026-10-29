@@ -268,6 +268,7 @@ pub async fn post_system_message(
         reply_broadcast: false,
         edited_ts: None,
         edited_by: None,
+        file_ids: Vec::new(),
     };
     state.store.insert_message(&msg).await?;
     announce_message(state, conv, &msg).await?;

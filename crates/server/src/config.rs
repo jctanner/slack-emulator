@@ -23,6 +23,8 @@ pub struct Config {
     pub rate_limits: bool,
     /// A fixture to load at startup when the database has no users yet.
     pub seed_file: Option<String>,
+    /// Largest file upload accepted, in bytes.
+    pub max_file_bytes: usize,
 }
 
 impl Default for Config {
@@ -40,6 +42,7 @@ impl Default for Config {
             admin_token: None,
             rate_limits: false,
             seed_file: None,
+            max_file_bytes: 50 * 1024 * 1024,
         }
     }
 }
@@ -76,6 +79,10 @@ impl Config {
                 Err(_) => d.rate_limits,
             },
             seed_file: env::var("EMU_SEED_FILE").ok().filter(|f| !f.is_empty()),
+            max_file_bytes: match env::var("EMU_MAX_FILE_BYTES") {
+                Ok(v) => v.parse().context("EMU_MAX_FILE_BYTES")?,
+                Err(_) => d.max_file_bytes,
+            },
         })
     }
 

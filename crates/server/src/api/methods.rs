@@ -4,7 +4,9 @@ use serde_json::{Value, json};
 use slack_emu_core::SlackError;
 use slack_emu_core::ids::TokenKind;
 
-use super::{ApiResult, Args, Caller, apps, chat, conversations, inspector, interactive, reactions, users, views};
+use super::{
+    ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, reactions, users, views,
+};
 use crate::AppState;
 
 /// Which credentials may call a method.
@@ -106,6 +108,12 @@ const METHODS: &[MethodSpec] = &[
     session("emu.views.close"),
     session("emu.views.current"),
     session("emu.views.submit"),
+    m("files.completeUploadExternal", &["files:write"]),
+    m("files.delete", &["files:write"]),
+    m("files.getUploadURLExternal", &["files:write"]),
+    m("files.info", &["files:read"]),
+    m("files.list", &["files:read"]),
+    m("files.upload", &[]),
     m("reactions.add", &["reactions:write"]),
     m("reactions.get", &["reactions:read"]),
     m("reactions.remove", &["reactions:write"]),
@@ -195,6 +203,12 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
         "emu.views.close" => interactive::view_close(s, c, a).await,
         "emu.views.current" => interactive::views_current(s, c, a).await,
         "emu.views.submit" => interactive::view_submit(s, c, a).await,
+        "files.completeUploadExternal" => files::complete_upload(s, c, a).await,
+        "files.delete" => files::delete(s, c, a).await,
+        "files.getUploadURLExternal" => files::get_upload_url(s, c, a).await,
+        "files.info" => files::info(s, c, a).await,
+        "files.list" => files::list(s, c, a).await,
+        "files.upload" => files::upload_v1(s, c, a).await,
         "reactions.add" => reactions::add(s, c, a).await,
         "reactions.get" => reactions::get(s, c, a).await,
         "reactions.remove" => reactions::remove(s, c, a).await,

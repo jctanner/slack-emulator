@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use serde_json::Value;
 use slack_emu_core::models::{
-    Account, ApiToken, App, Conversation, ConversationCounts, ConversationTypes, Message, NewConversation, NewUser,
-    Reaction, ThreadSummary, User, Workspace,
+    Account, ApiToken, App, Conversation, ConversationCounts, ConversationTypes, File, FileShare, Message,
+    NewConversation, NewUser, Reaction, ThreadSummary, User, Workspace,
 };
 
 pub use postgres::{PgStore, fresh_test_database};
@@ -175,6 +175,23 @@ pub trait Store: Send + Sync + 'static {
     async fn thread_summaries(&self, channel_id: &str, parents: &[String]) -> Result<HashMap<String, ThreadSummary>>;
     /// Newest ts across all messages, for seeding the ts clock.
     async fn max_ts(&self) -> Result<Option<String>>;
+
+    // Files
+    async fn create_file(&self, file: &File) -> Result<()>;
+    async fn get_file(&self, id: &str) -> Result<Option<File>>;
+    /// The files that still exist among `ids`.
+    async fn get_files(&self, ids: &[String]) -> Result<Vec<File>>;
+    async fn file_by_upload_token(&self, token: &str) -> Result<Option<File>>;
+    /// Saves title, size, upload token and state.
+    async fn update_file(&self, file: &File) -> Result<()>;
+    async fn set_file_data(&self, id: &str, data: &[u8]) -> Result<()>;
+    async fn file_data(&self, id: &str) -> Result<Option<Vec<u8>>>;
+    /// Deletes the file, its contents and shares (messages keep its ID).
+    async fn delete_file(&self, id: &str) -> Result<()>;
+    /// Completed files in a workspace, newest first.
+    async fn list_files(&self, team_id: &str) -> Result<Vec<File>>;
+    async fn add_file_share(&self, share: &FileShare) -> Result<()>;
+    async fn file_shares(&self, file_ids: &[String]) -> Result<Vec<FileShare>>;
 
     // Reactions
     /// Returns false if the user had already reacted with that emoji.

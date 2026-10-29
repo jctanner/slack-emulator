@@ -2,7 +2,7 @@
 //! suite; Postgres only when `EMU_TEST_POSTGRES` names a server (each test
 //! gets a fresh database there).
 
-use slack_emu_core::models::{Conversation, Message, NewConversation, NewUser};
+use slack_emu_core::models::{Conversation, File, FileShare, Message, NewConversation, NewUser};
 use slack_emu_core::now;
 
 use crate::{ConversationQuery, Store, StoreError, TsRange};
@@ -100,6 +100,7 @@ fn msg(channel: &str, ts: &str, user: &str, text: &str, thread_ts: Option<&str>)
         reply_broadcast: false,
         edited_ts: None,
         edited_by: None,
+        file_ids: Vec::new(),
     }
 }
 
@@ -248,6 +249,71 @@ pub(crate) async fn threads_reactions_and_counts(s: &dyn Store) {
     );
 }
 
+pub(crate) async fn files(s: &dyn Store) {
+    let ws = s.create_workspace("Acme", "acme").await.unwrap();
+    let a = s.create_user(new_user(&ws.id, "a")).await.unwrap();
+    let c = s
+        .create_conversation(channel(&ws.id, "chat", false), std::slice::from_ref(&a.id))
+        .await
+        .unwrap();
+    let mut f = File {
+        id: "F1".into(),
+        team_id: ws.id.clone(),
+        user_id: a.id.clone(),
+        bot_id: None,
+        name: "a.bin".into(),
+        title: "a.bin".into(),
+        mimetype: "application/octet-stream".into(),
+        filetype: "binary".into(),
+        snippet_type: None,
+        alt_txt: None,
+        size: 4,
+        created: now(),
+        upload_token: Some("tok".into()),
+        uploaded: false,
+        completed: false,
+    };
+    s.create_file(&f).await.unwrap();
+    assert_eq!(s.file_by_upload_token("tok").await.unwrap().unwrap().id, "F1");
+    // Arbitrary bytes round-trip (BLOB / BYTEA).
+    let bytes = [0u8, 255, 10, 13];
+    s.set_file_data("F1", &bytes).await.unwrap();
+    assert_eq!(s.file_data("F1").await.unwrap().unwrap(), bytes);
+    assert!(
+        s.list_files(&ws.id).await.unwrap().is_empty(),
+        "incomplete files aren't listed"
+    );
+
+    f.upload_token = None;
+    f.uploaded = true;
+    f.completed = true;
+    f.title = "Report".into();
+    s.update_file(&f).await.unwrap();
+    assert_eq!(s.get_file("F1").await.unwrap().unwrap(), f);
+    assert_eq!(s.list_files(&ws.id).await.unwrap(), vec![f.clone()]);
+
+    let mut m = msg(&c.id, "1000000001.000000", &a.id, "here", None);
+    m.subtype = Some("file_share".into());
+    m.file_ids = vec!["F1".into()];
+    s.insert_message(&m).await.unwrap();
+    let share = FileShare {
+        file_id: "F1".into(),
+        channel_id: c.id.clone(),
+        ts: m.ts.clone(),
+    };
+    s.add_file_share(&share).await.unwrap();
+    s.add_file_share(&share).await.unwrap();
+    assert_eq!(s.file_shares(&["F1".into()]).await.unwrap(), vec![share]);
+    assert_eq!(s.get_files(&["F1".into(), "F2".into()]).await.unwrap().len(), 1);
+
+    s.delete_file("F1").await.unwrap();
+    assert!(s.get_file("F1").await.unwrap().is_none());
+    assert!(s.file_data("F1").await.unwrap().is_none());
+    assert!(s.file_shares(&["F1".into()]).await.unwrap().is_empty());
+    // The message still names the file, so it can show a tombstone.
+    assert_eq!(s.get_message(&c.id, &m.ts).await.unwrap().unwrap().file_ids, ["F1"]);
+}
+
 /// Declares one `#[tokio::test]` per conformance check, each with a store
 /// from `$make` (an `Option`: `None` skips, e.g. when no Postgres is configured).
 macro_rules! suite {
@@ -261,6 +327,11 @@ macro_rules! suite {
         async fn conversation_visibility() {
             let Some(s) = $make else { return };
             $crate::conformance::conversation_visibility(&s).await;
+        }
+        #[tokio::test]
+        async fn files() {
+            let Some(s) = $make else { return };
+            $crate::conformance::files(&s).await;
         }
         #[tokio::test]
         async fn sessions_expire() {

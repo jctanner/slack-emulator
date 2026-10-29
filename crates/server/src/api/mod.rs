@@ -9,6 +9,7 @@ pub(crate) mod apps;
 pub mod args;
 pub(crate) mod chat;
 mod conversations;
+pub(crate) mod files;
 mod inspector;
 mod interactive;
 mod methods;
@@ -422,7 +423,7 @@ pub(crate) fn parse_args(headers: &HeaderMap, query: Option<&str>, body: &[u8]) 
     Ok(args)
 }
 
-async fn resolve_caller(
+pub(crate) async fn resolve_caller(
     state: &AppState,
     headers: &HeaderMap,
     jar: &CookieJar,

@@ -120,6 +120,16 @@ export function Composer({
   const [dismissed, setDismissed] = useState<number | null>(null)
   const [broadcast, setBroadcast] = useState(false)
   const [commands, setCommands] = useState<SlashCommand[]>([])
+  const [attachments, setAttachments] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string>()
+  const [dragging, setDragging] = useState(false)
+  const filePicker = useRef<HTMLInputElement>(null)
+  const addFiles = (list: FileList | File[] | null) => {
+    if (!list?.length) return
+    setUploadError(undefined)
+    setAttachments((a) => [...a, ...Array.from(list)].slice(0, 10))
+  }
   const ref = useRef<HTMLTextAreaElement>(null)
   const typingCommand = text.startsWith('/')
 
@@ -170,6 +180,8 @@ export function Composer({
 
   const submit = () => {
     const trimmed = text.trim()
+    if (uploading) return
+    if (attachments.length) return sendFiles(trimmed)
     if (!trimmed) return
     const cmd = parseCommand(text.trimEnd())
     if (cmd) {
@@ -190,6 +202,22 @@ export function Composer({
     setText('')
     setBroadcast(false)
     typingDone(channel, thread)
+  }
+
+  const sendFiles = async (trimmed: string) => {
+    setUploading(true)
+    setUploadError(undefined)
+    try {
+      await store.sendFiles(channel, encodeOutgoing(trimmed, users, convs), attachments, { thread_ts: thread })
+      setAttachments([])
+      setText('')
+      typingDone(channel, thread)
+    } catch (e: any) {
+      const detail = e?.data?.response_metadata?.messages?.[0]?.replace('[ERROR] ', '')
+      setUploadError(detail ?? e?.message ?? 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -237,7 +265,40 @@ export function Composer({
           ))}
         </ul>
       )}
-      <div className="composer-box">
+      <div
+        className={`composer-box ${dragging ? 'dragging' : ''}`}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault()
+            setDragging(true)
+          }
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files.length) return
+          e.preventDefault()
+          setDragging(false)
+          addFiles(e.dataTransfer.files)
+        }}
+      >
+        {attachments.length > 0 && (
+          <ul className="attachments" aria-label="Files to send">
+            {attachments.map((f, i) => (
+              <li key={`${f.name}-${i}`} className="attachment-chip">
+                <span className="attachment-name">{f.name}</span>
+                <span className="muted small">{formatSize(f.size)}</span>
+                <button
+                  aria-label={`Remove ${f.name}`}
+                  disabled={uploading}
+                  onClick={() => setAttachments((a) => a.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {uploadError && <div className="failed-note">{uploadError}</div>}
         <textarea
           ref={ref}
           rows={1}
@@ -252,8 +313,27 @@ export function Composer({
           }}
           onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
           onKeyDown={onKeyDown}
+          onPaste={(e) => {
+            if (e.clipboardData.files.length) {
+              e.preventDefault()
+              addFiles(e.clipboardData.files)
+            }
+          }}
         />
         <div className="composer-bar">
+          <input
+            ref={filePicker}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              addFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <button className="attach" onClick={() => filePicker.current?.click()} aria-label="Attach files" title="Attach files">
+            📎︎
+          </button>
           {broadcastLabel ? (
             <label className="broadcast">
               <input type="checkbox" checked={broadcast} onChange={(e) => setBroadcast(e.target.checked)} />
@@ -262,8 +342,13 @@ export function Composer({
           ) : (
             <span className="muted small composer-hint">{TOUCH ? '' : 'Shift + Enter for a new line'}</span>
           )}
-          <button className="send" onClick={submit} disabled={!text.trim()} aria-label="Send">
-            ➤
+          <button
+            className="send"
+            onClick={submit}
+            disabled={uploading || (!text.trim() && !attachments.length)}
+            aria-label={uploading ? 'Uploading' : 'Send'}
+          >
+            {uploading ? '…' : '➤'}
           </button>
         </div>
       </div>
@@ -288,4 +373,10 @@ export function TypingIndicator({ keyName }: { keyName: string }) {
   const text =
     who.length === 0 ? '' : who.length === 1 ? `${who[0]} is typing…` : who.length === 2 ? `${who[0]} and ${who[1]} are typing…` : 'Several people are typing…'
   return <div className="typing" aria-live="polite">{text}</div>
+}
+
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }

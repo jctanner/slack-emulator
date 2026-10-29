@@ -13,7 +13,7 @@ slack-emu-store = { path = "crates/store" }
 anyhow = "1"
 argon2 = "0.6"
 async-trait = "0.1"
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
 axum-extra = { version = "0.12", features = ["cookie"] }
 hex = "0.4"
 hmac = "0.13"

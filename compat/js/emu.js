@@ -32,6 +32,13 @@ export class Person {
     return r
   }
 
+  /** Fetches a file URL (url_private) with this person's session. */
+  async download(url) {
+    const res = await fetch(url, { headers: this.cookie ? { Cookie: this.cookie } : {} })
+    if (!res.ok) throw new Error(`download failed: ${res.status}`)
+    return Buffer.from(await res.arrayBuffer())
+  }
+
   async channelId(name) {
     const r = await this.api('users.conversations', { types: 'public_channel,private_channel' })
     return r.channels.find((c) => c.name === name).id
@@ -86,7 +93,18 @@ export function manifest(name, { socketMode, requestUrl, commands = [] } = {}) {
       })),
     },
     oauth_config: {
-      scopes: { bot: ['chat:write', 'channels:history', 'channels:read', 'app_mentions:read', 'users:read', 'commands'] },
+      scopes: {
+        bot: [
+          'chat:write',
+          'channels:history',
+          'channels:read',
+          'app_mentions:read',
+          'users:read',
+          'commands',
+          'files:write',
+          'files:read',
+        ],
+      },
     },
     settings: { event_subscriptions: events, interactivity, socket_mode_enabled: !!socketMode },
   }
