@@ -70,7 +70,7 @@ mod tests {
 
     /// A store on a fresh database, if `EMU_TEST_POSTGRES` is set.
     async fn store() -> Option<PgStore> {
-        let url = std::env::var("EMU_TEST_POSTGRES").ok()?;
+        let url = std::env::var("EMU_TEST_POSTGRES").ok().filter(|s| !s.is_empty())?;
         let db = fresh_test_database(&url).await.unwrap();
         Some(PgStore::connect(&db).await.unwrap())
     }

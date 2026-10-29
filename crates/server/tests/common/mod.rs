@@ -34,9 +34,9 @@ impl Harness {
 
     pub async fn with_config(tweak: impl FnOnce(&mut Config)) -> Self {
         // Set EMU_TEST_POSTGRES (a server URL) to run against Postgres; each harness gets its own database.
-        let database_url = match std::env::var("EMU_TEST_POSTGRES") {
-            Ok(server) => slack_emu_store::fresh_test_database(&server).await.unwrap(),
-            Err(_) => "sqlite::memory:".into(),
+        let database_url = match std::env::var("EMU_TEST_POSTGRES").ok().filter(|s| !s.is_empty()) {
+            Some(server) => slack_emu_store::fresh_test_database(&server).await.unwrap(),
+            None => "sqlite::memory:".into(),
         };
         let mut config = Config {
             database_url,
