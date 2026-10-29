@@ -1,0 +1,11 @@
+{
+  "name": "slack-emu-compat-js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "@slack/bolt": "^5.1.0"
+  }
+}

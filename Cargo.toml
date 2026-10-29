@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/store", "crates/server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+slack-emu-core = { path = "crates/core" }
+slack-emu-store = { path = "crates/store" }
+anyhow = "1"
+argon2 = "0.6"
+async-trait = "0.1"
+axum = { version = "0.8", features = ["ws"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
+hex = "0.4"
+hmac = "0.13"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form"] }
+http-body-util = "0.1"
+mime_guess = "2"
+rand = "0.10"
+rust-embed = "8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+serde_urlencoded = "0.7"
+serde-saphyr = "2"
+sha2 = "0.11"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "migrate", "macros"] }
+thiserror = "2"
+time = { version = "0.3", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.7", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Password hashing is unbearably slow unoptimized; keep debug builds and tests snappy.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3
