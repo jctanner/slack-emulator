@@ -189,8 +189,8 @@ impl Interactions {
         let secret = new_secret().to_lowercase();
         let id = format!(
             "{}.{}.{}",
-            &digits(&secret, 13),
-            &digits(&secret[13..], 12),
+            digits(&secret, 13),
+            digits(&secret[13..], 12),
             &secret[..32]
         );
         let mut inner = self.inner.lock().unwrap();
