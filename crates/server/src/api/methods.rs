@@ -5,7 +5,8 @@ use slack_emu_core::SlackError;
 use slack_emu_core::ids::TokenKind;
 
 use super::{
-    ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, pins, reactions, users, views,
+    ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, pins, reactions, scheduled,
+    users, views,
 };
 use crate::AppState;
 
@@ -71,10 +72,13 @@ const METHODS: &[MethodSpec] = &[
     m("bots.info", &["users:read"]),
     session("chat.command"),
     m("chat.delete", &["chat:write"]),
+    m("chat.deleteScheduledMessage", &["chat:write"]),
     m("chat.getPermalink", &[]),
     m("chat.meMessage", &["chat:write"]),
     m("chat.postEphemeral", &["chat:write"]),
     m("chat.postMessage", &["chat:write"]),
+    m("chat.scheduleMessage", &["chat:write"]),
+    m("chat.scheduledMessages.list", &["chat:write"]),
     m("chat.update", &["chat:write"]),
     session("client.counts"),
     m("conversations.archive", &[]),
@@ -176,10 +180,13 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
         "bots.info" => apps::bots_info(s, c, a).await,
         "chat.command" => interactive::command(s, c, a).await,
         "chat.delete" => chat::delete(s, c, a).await,
+        "chat.deleteScheduledMessage" => scheduled::delete(s, c, a).await,
         "chat.getPermalink" => chat::get_permalink(s, c, a).await,
         "chat.meMessage" => chat::me_message(s, c, a).await,
         "chat.postEphemeral" => chat::post_ephemeral(s, c, a).await,
         "chat.postMessage" => chat::post_message(s, c, a).await,
+        "chat.scheduleMessage" => scheduled::schedule(s, c, a).await,
+        "chat.scheduledMessages.list" => scheduled::list(s, c, a).await,
         "chat.update" => chat::update(s, c, a).await,
         "client.counts" => users::client_counts(s, c, a).await,
         "conversations.archive" => conversations::archive(s, c, a).await,

@@ -6,7 +6,7 @@ use it through a Slack-like web UI in any desktop or mobile browser.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the architecture and roadmap.
 
-**Status: milestone 7 in progress (files, external selects, shortcuts, pins and bookmarks done).** Accounts and multiple workspaces;
+**Status: milestone 7 in progress (files, external selects, shortcuts, pins, bookmarks and scheduled messages done).** Accounts and multiple workspaces;
 public and private channels, DMs and group DMs, threads, reactions, unread
 tracking and live updates in a responsive web UI. Apps are created from Slack
 app manifests and installed for bot tokens with enforced scopes. Events are
@@ -26,6 +26,7 @@ Web API methods:
 - `bookmarks.add|edit|list|remove`, `pins.add|list|remove`
 - `apps.connections.open`, `apps.manifest.create|update|delete|export|validate`
 - `chat.postMessage`, `chat.postEphemeral`, `chat.update`, `chat.delete`, `chat.meMessage`, `chat.getPermalink`
+- `chat.scheduleMessage`, `chat.scheduledMessages.list`, `chat.deleteScheduledMessage`
 - `conversations.archive|close|create|history|info|invite|join|kick|leave|list|mark|members|open|rename|replies|setPurpose|setTopic|unarchive`
 - `files.getUploadURLExternal|completeUploadExternal|info|list|delete` (what `files_upload_v2` / `files.uploadV2` use; the retired `files.upload` answers `method_deprecated`, as on Slack)
 - `reactions.add|get|remove`
@@ -64,7 +65,10 @@ page).
 Messages can be pinned (📌 in a message's actions; "Pinned" in channel
 details), and channels have a bookmarks bar.
 
-Next up in milestone 7: scheduled messages, user groups and search; OAuth, OIDC sign-in and retention policies last (see
+Messages can be scheduled, by bots or from the composer (🕒), and are
+posted when due, even across restarts.
+
+Next up in milestone 7: user groups and search; OAuth, OIDC sign-in and retention policies last (see
 [the roadmap](docs/DESIGN.md#milestones)).
 
 ## Run it

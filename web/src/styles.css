@@ -1670,6 +1670,113 @@ button.primary-small {
 
 /* ---------- mobile: one pane at a time ---------- */
 
+/* ---------- scheduled messages ---------- */
+
+.schedule-menu {
+  margin-left: auto;
+}
+
+.composer-bar .schedule-menu + .send {
+  margin-left: 0;
+}
+
+.schedule-button {
+  border: 0;
+  background: none;
+  font-size: 16px;
+  padding: 2px 6px;
+  color: var(--muted);
+}
+
+.bk-menu.schedule-popover {
+  right: 0;
+  left: auto;
+  top: auto;
+  bottom: calc(100% + 4px);
+  min-width: 320px;
+}
+
+.schedule-title {
+  padding: 4px 14px 6px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.schedule-custom {
+  display: flex;
+  gap: 6px;
+  padding: 6px 14px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.bk-menu .schedule-custom button {
+  width: auto;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.bk-menu .schedule-custom button:hover {
+  background: var(--primary-hover);
+}
+
+.schedule-custom input {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.scheduled-bar {
+  padding: 4px 4px 6px;
+  font-size: 13px;
+}
+
+.scheduled-bar .link {
+  font-size: 13px;
+}
+
+.scheduled-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.scheduled-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+}
+
+.scheduled-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.scheduled-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scheduled-list button {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+}
+
 /* ---------- pins and bookmarks ---------- */
 
 .pinned-note {

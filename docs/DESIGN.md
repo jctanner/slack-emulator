@@ -429,6 +429,15 @@ docs/
   - Bookmarks are links only (`type: link`, http or https). Slack has no
     public bookmark events, so clients refresh through the UI-only
     `emu_bookmarks_changed`.
+- Milestone 7, scheduled messages (2026-10-29):
+  - Stored in the database, so they survive restarts. A background task
+    checks every second and posts due ones with `chat.postMessage` as
+    whoever scheduled them. A revoked token, a deleted user, or a channel
+    the sender has since left makes the post fail, as on Slack. Apps see
+    the outcome in their delivery log (`scheduled_message`).
+  - `time_in_past` and `time_too_far` (more than 120 days ahead) match
+    Slack. People and apps list and delete only their own. Slack's limit
+    of 30 per channel per 5 minutes isn't enforced.
 - `client.counts` (an undocumented method from Slack's own web client) drives
   the unread state in the sidebar. Events Slack doesn't have are prefixed
   `emu_` and are never delivered to apps.

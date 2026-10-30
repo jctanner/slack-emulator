@@ -8,6 +8,7 @@ pub mod events;
 pub mod harness;
 pub mod interactions;
 pub mod ratelimit;
+pub mod scheduler;
 pub mod services;
 mod socket_mode;
 mod web;
@@ -71,6 +72,7 @@ impl AppState {
             rate_limits: Arc::new(RateLimiter::new(config_rate_limits)),
         };
         delivery::spawn_dispatcher(state.clone());
+        scheduler::spawn(state.clone());
         state
             .ensure_default_workspace()
             .await

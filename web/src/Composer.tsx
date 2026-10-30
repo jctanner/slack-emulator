@@ -5,6 +5,7 @@ import { searchEmoji } from './emoji'
 import { displayName, encodeOutgoing } from './mrkdwn'
 import { useWorkspace } from './store'
 import { Avatar } from './Avatar'
+import { ScheduledList, SchedulePicker } from './Scheduled'
 import { ShortcutMenu } from './Shortcuts'
 
 // Unsent text per conversation/thread, kept while the app is open.
@@ -244,8 +245,21 @@ export function Composer({
     }
   }
 
+  const schedule = async (post_at: number) => {
+    await store.call('chat.scheduleMessage', {
+      channel,
+      text: encodeOutgoing(text.trim(), users, convs),
+      post_at,
+      thread_ts: thread,
+    })
+    setText('')
+    typingDone(channel, thread)
+    store.scheduledChanged()
+  }
+
   return (
     <div className="composer">
+      {!thread && <ScheduledList channel={channel} />}
       {items.length > 0 && (
         <ul className="autocomplete" role="listbox">
           {items.map((s, i) => (
@@ -344,6 +358,7 @@ export function Composer({
           ) : (
             <span className="muted small composer-hint">{TOUCH ? '' : 'Shift + Enter for a new line'}</span>
           )}
+          <SchedulePicker disabled={!text.trim() || !!attachments.length || !!parseCommand(text.trimEnd())} onSchedule={schedule} />
           <button
             className="send"
             onClick={submit}

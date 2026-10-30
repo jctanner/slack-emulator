@@ -15,6 +15,7 @@ mod interactive;
 mod methods;
 mod pins;
 mod reactions;
+mod scheduled;
 pub mod shapes;
 mod users;
 mod views;

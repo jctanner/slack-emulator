@@ -31,6 +31,8 @@ export type WorkspaceState = {
   appsVersion: number
   /** Bumped per channel when its bookmarks change. */
   bookmarksVersion: Record<string, number>
+  /** Bumped when this user schedules or cancels a message. */
+  scheduledVersion: number
 }
 
 type Listener = () => void
@@ -55,6 +57,7 @@ export class WorkspaceStore {
       homeViews: {},
       appsVersion: 0,
       bookmarksVersion: {},
+      scheduledVersion: 0,
     }
   }
 
@@ -101,6 +104,10 @@ export class WorkspaceStore {
     const r = await this.call<{ commands: SlashCommand[] }>('emu.commands.list')
     this.commands = { list: r.commands, at: Date.now() }
     return r.commands
+  }
+
+  scheduledChanged() {
+    this.set((s) => ({ scheduledVersion: s.scheduledVersion + 1 }))
   }
 
   /** Forgets cached commands and shortcuts after apps change. */

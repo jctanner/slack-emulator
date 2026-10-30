@@ -2,7 +2,9 @@
 //! suite; Postgres only when `EMU_TEST_POSTGRES` names a server (each test
 //! gets a fresh database there).
 
-use slack_emu_core::models::{Bookmark, Conversation, File, FileShare, Message, NewConversation, NewUser, Pin};
+use slack_emu_core::models::{
+    Bookmark, Conversation, File, FileShare, Message, NewConversation, NewUser, Pin, ScheduledMessage,
+};
 use slack_emu_core::now;
 
 use crate::{ConversationQuery, Store, StoreError, TsRange};
@@ -367,6 +369,35 @@ pub(crate) async fn pins_and_bookmarks(s: &dyn Store) {
     assert!(s.bookmarks(&c.id).await.unwrap().is_empty());
 }
 
+pub(crate) async fn scheduled_messages(s: &dyn Store) {
+    let ws = s.create_workspace("Acme", "acme").await.unwrap();
+    let a = s.create_user(new_user(&ws.id, "a")).await.unwrap();
+    let c = s
+        .create_conversation(channel(&ws.id, "chat", false), std::slice::from_ref(&a.id))
+        .await
+        .unwrap();
+    let sched = |id: &str, post_at: i64| ScheduledMessage {
+        id: id.into(),
+        team_id: ws.id.clone(),
+        channel_id: c.id.clone(),
+        user_id: a.id.clone(),
+        token: Some("xoxb-x".into()),
+        app_id: Some("A1".into()),
+        post_at,
+        created: 100,
+        args: serde_json::json!({"text": id}),
+    };
+    s.add_scheduled(&sched("Q2", 300)).await.unwrap();
+    s.add_scheduled(&sched("Q1", 200)).await.unwrap();
+    assert_eq!(s.get_scheduled("Q1").await.unwrap().unwrap(), sched("Q1", 200));
+    let ids = |v: Vec<ScheduledMessage>| v.into_iter().map(|m| m.id).collect::<Vec<_>>();
+    assert_eq!(ids(s.list_scheduled(&ws.id).await.unwrap()), ["Q1", "Q2"]);
+    assert_eq!(ids(s.due_scheduled(250).await.unwrap()), ["Q1"]);
+    assert!(s.delete_scheduled("Q1").await.unwrap());
+    assert!(!s.delete_scheduled("Q1").await.unwrap());
+    assert_eq!(ids(s.due_scheduled(1000).await.unwrap()), ["Q2"]);
+}
+
 /// Declares one `#[tokio::test]` per conformance check, each with a store
 /// from `$make` (an `Option`: `None` skips, e.g. when no Postgres is configured).
 macro_rules! suite {
@@ -390,6 +421,11 @@ macro_rules! suite {
         async fn pins_and_bookmarks() {
             let Some(s) = $make else { return };
             $crate::conformance::pins_and_bookmarks(&s).await;
+        }
+        #[tokio::test]
+        async fn scheduled_messages() {
+            let Some(s) = $make else { return };
+            $crate::conformance::scheduled_messages(&s).await;
         }
         #[tokio::test]
         async fn sessions_expire() {

@@ -300,3 +300,19 @@ pub struct Bookmark {
     pub updated: i64,
     pub updated_by: String,
 }
+
+/// A message waiting to be posted (`chat.scheduleMessage`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScheduledMessage {
+    /// `Q…`
+    pub id: String,
+    pub team_id: String,
+    pub channel_id: String,
+    pub user_id: String,
+    pub token: Option<String>,
+    pub app_id: Option<String>,
+    pub post_at: i64,
+    pub created: i64,
+    /// `chat.postMessage` arguments.
+    pub args: serde_json::Value,
+}

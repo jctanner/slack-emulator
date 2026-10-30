@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use slack_emu_core::models::{
     Account, ApiToken, App, Bookmark, Conversation, ConversationCounts, ConversationTypes, File, FileShare, Message,
-    NewConversation, NewUser, Pin, Reaction, ThreadSummary, User, Workspace,
+    NewConversation, NewUser, Pin, Reaction, ScheduledMessage, ThreadSummary, User, Workspace,
 };
 
 pub use postgres::{PgStore, fresh_test_database};
@@ -211,6 +211,16 @@ pub trait Store: Send + Sync + 'static {
     async fn remove_bookmark(&self, id: &str) -> Result<()>;
     /// A channel's bookmarks, oldest first.
     async fn bookmarks(&self, channel_id: &str) -> Result<Vec<Bookmark>>;
+
+    // Scheduled messages
+    async fn add_scheduled(&self, msg: &ScheduledMessage) -> Result<()>;
+    async fn get_scheduled(&self, id: &str) -> Result<Option<ScheduledMessage>>;
+    /// A workspace's pending messages, soonest first.
+    async fn list_scheduled(&self, team_id: &str) -> Result<Vec<ScheduledMessage>>;
+    /// Messages due at or before `now`, soonest first.
+    async fn due_scheduled(&self, now: i64) -> Result<Vec<ScheduledMessage>>;
+    /// Returns false if it was already gone (posted or deleted).
+    async fn delete_scheduled(&self, id: &str) -> Result<bool>;
 
     // Reactions
     /// Returns false if the user had already reacted with that emoji.

@@ -16,7 +16,7 @@ macro_rules! sql_store {
         use slack_emu_core::ids::{IdKind, TokenKind, new_id, new_internal_id};
         use slack_emu_core::models::{
             Account, ApiToken, App, Bookmark, Conversation, ConversationCounts, File, FileShare, Message, NewConversation,
-            NewUser, Pin, Reaction, ThreadSummary, Topic, User, Workspace,
+            NewUser, Pin, Reaction, ScheduledMessage, ThreadSummary, Topic, User, Workspace,
         };
         use slack_emu_core::now;
         use sqlx::{Arguments, Row};
@@ -187,6 +187,20 @@ macro_rules! sql_store {
                 created: r.get("created"),
                 updated: r.get("updated"),
                 updated_by: r.get("updated_by"),
+            }
+        }
+
+        fn scheduled_row(r: $row) -> ScheduledMessage {
+            ScheduledMessage {
+                id: r.get("id"),
+                team_id: r.get("team_id"),
+                channel_id: r.get("channel_id"),
+                user_id: r.get("user_id"),
+                token: r.get("token"),
+                app_id: r.get("app_id"),
+                post_at: r.get("post_at"),
+                created: r.get("created"),
+                args: json_col(&r, "args").unwrap_or(Value::Null),
             }
         }
 
@@ -630,6 +644,7 @@ macro_rules! sql_store {
                 for table in [
                     "sessions",
                     "identities",
+                    "scheduled_messages",
                     "pins",
                     "bookmarks",
                     "file_shares",
@@ -1392,6 +1407,65 @@ macro_rules! sql_store {
                     .into_iter()
                     .map(bookmark_row)
                     .collect())
+            }
+
+            async fn add_scheduled(&self, m: &ScheduledMessage) -> Result<()> {
+                sqlx::query(prep(
+                    "INSERT INTO scheduled_messages (id, team_id, channel_id, user_id, token, app_id, post_at, created, args)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ))
+                .bind(&m.id)
+                .bind(&m.team_id)
+                .bind(&m.channel_id)
+                .bind(&m.user_id)
+                .bind(&m.token)
+                .bind(&m.app_id)
+                .bind(m.post_at)
+                .bind(m.created)
+                .bind(m.args.to_string())
+                .execute(&self.pool)
+                .await?;
+                Ok(())
+            }
+
+            async fn get_scheduled(&self, id: &str) -> Result<Option<ScheduledMessage>> {
+                Ok(sqlx::query(prep("SELECT * FROM scheduled_messages WHERE id = ?"))
+                    .bind(id)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .map(scheduled_row))
+            }
+
+            async fn list_scheduled(&self, team_id: &str) -> Result<Vec<ScheduledMessage>> {
+                Ok(
+                    sqlx::query(prep("SELECT * FROM scheduled_messages WHERE team_id = ? ORDER BY post_at, id"))
+                        .bind(team_id)
+                        .fetch_all(&self.pool)
+                        .await?
+                        .into_iter()
+                        .map(scheduled_row)
+                        .collect(),
+                )
+            }
+
+            async fn due_scheduled(&self, now: i64) -> Result<Vec<ScheduledMessage>> {
+                Ok(
+                    sqlx::query(prep("SELECT * FROM scheduled_messages WHERE post_at <= ? ORDER BY post_at, id"))
+                        .bind(now)
+                        .fetch_all(&self.pool)
+                        .await?
+                        .into_iter()
+                        .map(scheduled_row)
+                        .collect(),
+                )
+            }
+
+            async fn delete_scheduled(&self, id: &str) -> Result<bool> {
+                let r = sqlx::query(prep("DELETE FROM scheduled_messages WHERE id = ?"))
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+                Ok(r.rows_affected() > 0)
             }
 
             async fn add_reaction(&self, channel_id: &str, ts: &str, name: &str, user_id: &str) -> Result<bool> {
