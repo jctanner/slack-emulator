@@ -2,6 +2,7 @@ import { Fragment, useLayoutEffect, useMemo, useRef, useState, type KeyboardEven
 import type { Message, SlackFile } from './api'
 import { useWs } from './context'
 import { MessageBlocks, type Container } from './BlockKit'
+import { copyText } from './browser'
 import { formatSize } from './Composer'
 import { ShortcutMenu } from './Shortcuts'
 import { EmojiPicker } from './EmojiPicker'
@@ -233,9 +234,9 @@ function MessageRow({
   const copyLink = async () => {
     try {
       const r = await ws.store.call<{ permalink: string }>('chat.getPermalink', { channel, message_ts: msg.ts })
-      await navigator.clipboard.writeText(r.permalink)
+      if (!(await copyText(r.permalink))) prompt('Copy this link:', r.permalink)
     } catch {
-      // Clipboard may be unavailable (insecure context); ignore.
+      // The message may have gone; nothing to copy.
     }
   }
 

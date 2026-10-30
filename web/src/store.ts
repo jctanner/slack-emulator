@@ -4,6 +4,7 @@
 // realtime events.
 
 import { useSyncExternalStore } from 'react'
+import { uuid } from './browser'
 import { slack, slackAll, type Conversation, type Counts, type Message, type Shortcut, type SlackUser, type SlashCommand, type Usergroup, type View } from './api'
 
 export type MessageList = { msgs: Message[]; hasMore: boolean; cursor?: string; loading: boolean }
@@ -224,7 +225,7 @@ export class WorkspaceStore {
   // ---------- sending ----------
 
   async send(channel: string, text: string, opts: { thread_ts?: string; reply_broadcast?: boolean } = {}) {
-    const client_msg_id = crypto.randomUUID()
+    const client_msg_id = uuid()
     const pending: Message = {
       ts: `9999999999.${client_msg_id}`,
       user: this.state.me,

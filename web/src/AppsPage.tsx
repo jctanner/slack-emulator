@@ -4,6 +4,7 @@ import { useWs } from './context'
 import { clientPath, navigate } from './router'
 import { useWorkspace } from './store'
 import { displayName } from './mrkdwn'
+import { copyText } from './browser'
 
 type AppSummary = {
   id: string
@@ -208,11 +209,10 @@ function Secret({ value, label }: { value: string; label: string }) {
       <button onClick={() => setShown((s) => !s)}>{shown ? 'Hide' : 'Show'}</button>
       <button
         onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(value)
+          if (await copyText(value)) {
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
-          } catch {
+          } else {
             setShown(true)
           }
         }}
