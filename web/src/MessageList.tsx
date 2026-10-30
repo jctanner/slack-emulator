@@ -3,6 +3,7 @@ import type { Message, SlackFile } from './api'
 import { useWs } from './context'
 import { MessageBlocks, type Container } from './BlockKit'
 import { formatSize } from './Composer'
+import { ShortcutMenu } from './Shortcuts'
 import { EmojiPicker } from './EmojiPicker'
 import { emojiChar } from './emoji'
 import { Mrkdwn, decodeForEdit, displayName, encodeOutgoing, type MrkdwnContext } from './mrkdwn'
@@ -387,6 +388,7 @@ function MessageRow({
           <button title="Copy link" onClick={copyLink}>
             🔗︎
           </button>
+          <ShortcutMenu type="message" channel={channel} messageTs={msg.ts} label="More actions" />
           {canEdit && (
             <button title="Edit message" onClick={() => onEdit(true)}>
               ✎

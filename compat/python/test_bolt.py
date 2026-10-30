@@ -89,6 +89,37 @@ def build_bolt(token: str, prefix: str, signing_secret: str | None = None) -> Ap
         ack()
         client.chat_postMessage(channel=view["private_metadata"], text=f"<@{body['user']['id']}> opened: {title}")
 
+    @app.shortcut("summarize")
+    def summarize(ack, shortcut, respond):
+        ack()
+        respond(response_type="in_channel", text=f"Summary of: {shortcut['message']['text']}")
+
+    @app.shortcut("new_ticket")
+    def new_ticket(ack, body, client):
+        ack()
+        client.views_open(
+            trigger_id=body["trigger_id"],
+            view={
+                "type": "modal",
+                "callback_id": "lookup",
+                "title": {"type": "plain_text", "text": "Find a ticket"},
+                "submit": {"type": "plain_text", "text": "Open"},
+                "blocks": [
+                    {
+                        "type": "input",
+                        "block_id": "ticket",
+                        "label": {"type": "plain_text", "text": "Ticket"},
+                        "element": {"type": "external_select", "action_id": "ticket_lookup", "min_query_length": 2},
+                    }
+                ],
+            },
+        )
+
+    @app.options("ticket_lookup")
+    def ticket_options(ack, payload):
+        q = payload["value"]
+        ack(options=[{"text": {"type": "plain_text", "text": f"{q}-{n}"}, "value": str(n)} for n in (1, 2)])
+
     @app.event("app_home_opened")
     def home(event, client):
         if event["tab"] == "home":
@@ -103,7 +134,7 @@ def build_bolt(token: str, prefix: str, signing_secret: str | None = None) -> Ap
     return app
 
 
-def exercise(person: Person, bot_user: str, prefix: str):
+def exercise(person: Person, bot_user: str, prefix: str, app_id: str):
     general = person.channel_id("general")
     person.api("conversations.invite", channel=general, users=bot_user)
 
@@ -156,6 +187,27 @@ def exercise(person: Person, bot_user: str, prefix: str):
         general, lambda m: m.get("user") == bot_user and m["text"] == f"<@{person.user_id}> opened: Broken build"
     )
 
+    # A message shortcut answers through its response URL.
+    long = person.api("chat.postMessage", channel=general, text="a very long discussion")
+    person.api("emu.shortcuts.run", app_id=app_id, callback_id="summarize", channel=general, message_ts=long["ts"])
+    person.wait_for_message(general, lambda m: m["text"] == "Summary of: a very long discussion")
+
+    # A global shortcut opens a modal whose external select asks the app for options.
+    person.api("emu.shortcuts.run", app_id=app_id, callback_id="new_ticket")
+    lookup = wait_until(
+        lambda: next((v for v in person.api("emu.views.current")["views"] if v["callback_id"] == "lookup"), None),
+        what="the lookup modal",
+    )
+    found = person.api(
+        "emu.blocks.suggest",
+        container={"type": "view", "view_id": lookup["id"]},
+        block_id="ticket",
+        action_id="ticket_lookup",
+        value="bug",
+    )
+    assert [o["text"]["text"] for o in found["options"]] == ["bug-1", "bug-2"]
+    person.api("emu.views.close", view_id=lookup["id"], all=True)
+
     # App Home: opening the tab makes the app publish a view.
     dm = person.api("conversations.open", users=bot_user)["channel"]["id"]
     person.api("emu.apps.home", channel=dm, tab="home")
@@ -182,7 +234,7 @@ def test_socket_mode():
             lambda: alice.api("emu.apps.info", app_id=app_id)["app"]["socket_connections"] > 0,
             what="a Socket Mode connection",
         )
-        exercise(alice, install["bot_user_id"], prefix)
+        exercise(alice, install["bot_user_id"], prefix, app_id)
     finally:
         handler.close()
 
@@ -211,4 +263,4 @@ def test_http_events():
 
     assert alice.api("emu.apps.verifyUrl", app_id=app_id)["verified"]
     assert alice.api("emu.apps.info", app_id=app_id)["app"]["request_url_verified"]
-    exercise(alice, install["bot_user_id"], prefix)
+    exercise(alice, install["bot_user_id"], prefix, app_id)

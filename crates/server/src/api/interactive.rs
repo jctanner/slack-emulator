@@ -88,23 +88,31 @@ fn find_in_message(message: &Value, block_id: &str, action_id: &str) -> Option<V
         .cloned()
 }
 
-/// `emu.blocks.action`: someone used an interactive element in a message or view.
-pub async fn block_action(state: &AppState, caller: &Caller, args: &Args) -> ApiResult {
-    let me = caller.user()?;
-    let container = args::json(args, "container")?.unwrap_or_default();
-    let block_id = req_str(args, "block_id")?;
-    let action_id = req_str(args, "action_id")?;
-    let picked = args::json(args, "value")?.unwrap_or_else(|| json!({}));
-    let values = values_arg(args)?;
+/// Where an interactive element lives, and the app that owns it.
+struct Located {
+    app: App,
+    el: Value,
+    /// The payload's `container`.
+    container: Value,
+    /// For messages: the conversation, the message (unless ephemeral) and where responses go.
+    channel: Option<Value>,
+    message: Option<Value>,
+    target: Option<ResponseTarget>,
+    /// For modals and Home tabs.
+    view: Option<View>,
+}
 
-    let mut payload = json!({
-        "type": "block_actions",
-        "user": user_obj(me),
-        "team": team_obj(&caller.team),
-        "enterprise": null,
-        "is_enterprise_install": false,
-    });
-    let (app, el) = match container["type"].as_str() {
+/// Finds the element `block_id`/`action_id` in the message or view `container` points at.
+async fn locate(
+    state: &AppState,
+    caller: &Caller,
+    container: &Value,
+    block_id: &str,
+    action_id: &str,
+) -> ApiResult<Located> {
+    let me = caller.user()?;
+    let not_found = || ApiError::from(slack_emu_core::SlackError::new("action_not_found"));
+    match container["type"].as_str() {
         Some("message") => {
             let channel = container["channel_id"].as_str().unwrap_or_default();
             let ts = container["message_ts"].as_str().unwrap_or_default();
@@ -126,8 +134,7 @@ pub async fn block_action(state: &AppState, caller: &Caller, args: &Args) -> Api
                 };
                 (shapes::one_message(state, &msg).await?, msg.app_id)
             };
-            let el = find_in_message(&message, &block_id, &action_id)
-                .ok_or_else(|| ApiError::from(slack_emu_core::SlackError::new("action_not_found")))?;
+            let el = find_in_message(&message, block_id, action_id).ok_or_else(not_found)?;
             let app = interactive_app(state, app_id.as_deref()).await?;
             let target = ResponseTarget {
                 team_id: caller.team.id.clone(),
@@ -139,44 +146,84 @@ pub async fn block_action(state: &AppState, caller: &Caller, args: &Args) -> Api
                     ephemeral,
                 }),
             };
-            payload["container"] = json!({
-                "type": "message",
-                "message_ts": ts,
-                "channel_id": conv.id,
-                "is_ephemeral": ephemeral,
-            });
-            payload["channel"] = json!({"id": conv.id, "name": channel_name(&conv)});
-            if !ephemeral {
-                payload["message"] = message;
-            }
-            payload["state"] = json!({ "values": values });
-            payload["response_url"] = json!(interactions::response_url(state, "actions", target));
-            (app, el)
+            Ok(Located {
+                app,
+                el,
+                container: json!({
+                    "type": "message",
+                    "message_ts": ts,
+                    "channel_id": conv.id,
+                    "is_ephemeral": ephemeral,
+                }),
+                channel: Some(json!({"id": conv.id, "name": channel_name(&conv)})),
+                message: (!ephemeral).then_some(message),
+                target: Some(target),
+                view: None,
+            })
         }
         Some("view") => {
             let view_id = container["view_id"].as_str().unwrap_or_default();
-            let Some(mut view) = interactions::find_view(state, view_id)
+            let Some(view) = interactions::find_view(state, view_id)
                 .await?
                 .filter(|v| v.user_id == me.id)
             else {
                 return fail("not_found");
             };
-            let el = find_element(&view.definition["blocks"], &block_id, &action_id)
+            let el = find_element(&view.definition["blocks"], block_id, action_id)
                 .cloned()
-                .ok_or_else(|| ApiError::from(slack_emu_core::SlackError::new("action_not_found")))?;
+                .ok_or_else(not_found)?;
             let app = interactive_app(state, Some(&view.app_id)).await?;
-            view.values = values;
-            interactions::save_view(state, &view).await?;
-            payload["container"] = json!({"type": "view", "view_id": view.id});
-            payload["view"] = view.to_json();
-            (app, el)
+            Ok(Located {
+                app,
+                el,
+                container: json!({"type": "view", "view_id": view.id}),
+                channel: None,
+                message: None,
+                target: None,
+                view: Some(view),
+            })
         }
-        _ => return Err(ApiError::invalid_arguments("container must be a message or a view")),
-    };
+        _ => Err(ApiError::invalid_arguments("container must be a message or a view")),
+    }
+}
+
+/// `emu.blocks.action`: someone used an interactive element in a message or view.
+pub async fn block_action(state: &AppState, caller: &Caller, args: &Args) -> ApiResult {
+    let me = caller.user()?;
+    let container = args::json(args, "container")?.unwrap_or_default();
+    let block_id = req_str(args, "block_id")?;
+    let action_id = req_str(args, "action_id")?;
+    let picked = args::json(args, "value")?.unwrap_or_else(|| json!({}));
+    let values = values_arg(args)?;
+    let loc = locate(state, caller, &container, &block_id, &action_id).await?;
+    let app = loc.app;
+
+    let mut payload = json!({
+        "type": "block_actions",
+        "user": user_obj(me),
+        "team": team_obj(&caller.team),
+        "enterprise": null,
+        "is_enterprise_install": false,
+        "container": loc.container,
+    });
+    if let Some(mut view) = loc.view {
+        view.values = values;
+        interactions::save_view(state, &view).await?;
+        payload["view"] = view.to_json();
+    } else {
+        payload["channel"] = loc.channel.unwrap_or_default();
+        if let Some(m) = loc.message {
+            payload["message"] = m;
+        }
+        payload["state"] = json!({ "values": values });
+        if let Some(target) = loc.target {
+            payload["response_url"] = json!(interactions::response_url(state, "actions", target));
+        }
+    }
     payload["api_app_id"] = json!(app.id);
     payload["token"] = json!(app.verification_token);
     payload["trigger_id"] = json!(interactions::trigger(state, &caller.team.id, &me.id, &app.id));
-    payload["actions"] = json!([action(state, &el, &block_id, &picked)]);
+    payload["actions"] = json!([action(state, &loc.el, &block_id, &picked)]);
 
     let url = app.manifest().interactivity_url().map(str::to_owned);
     state
@@ -185,6 +232,72 @@ pub async fn block_action(state: &AppState, caller: &Caller, args: &Args) -> Api
         .await
         .map_err(dispatch_failed)?;
     Ok(json!({"ok": true}))
+}
+
+/// `emu.blocks.suggest`: someone typed into an `external_select`; the app
+/// answers the `block_suggestion` with `options` or `option_groups`.
+pub async fn block_suggest(state: &AppState, caller: &Caller, args: &Args) -> ApiResult {
+    let me = caller.user()?;
+    let container = args::json(args, "container")?.unwrap_or_default();
+    let block_id = req_str(args, "block_id")?;
+    let action_id = req_str(args, "action_id")?;
+    let loc = locate(state, caller, &container, &block_id, &action_id).await?;
+    if !matches!(
+        loc.el["type"].as_str(),
+        Some("external_select" | "multi_external_select")
+    ) {
+        return Err(ApiError::invalid_arguments("only external selects load options"));
+    }
+    let app = loc.app;
+    let mut payload = json!({
+        "type": "block_suggestion",
+        "user": user_obj(me),
+        "team": team_obj(&caller.team),
+        "enterprise": null,
+        "is_enterprise_install": false,
+        "container": loc.container,
+        "api_app_id": app.id,
+        "token": app.verification_token,
+        "action_id": action_id,
+        "block_id": block_id,
+        "value": opt_str(args, "value").unwrap_or_default(),
+    });
+    if let Some(view) = loc.view {
+        payload["view"] = view.to_json();
+    }
+    if let Some(c) = loc.channel {
+        payload["channel"] = c;
+    }
+    if let Some(m) = loc.message {
+        payload["message"] = m;
+    }
+    let url = app.manifest().options_url().map(str::to_owned);
+    let resp = state
+        .delivery
+        .interact(&app, "interactive", "block_suggestion".into(), payload, url)
+        .await
+        .map_err(dispatch_failed)?
+        .unwrap_or(Value::Null);
+    let well_formed = |opts: &Value| {
+        opts.as_array().is_some_and(|a| {
+            a.iter()
+                .all(|o| o["value"].is_string() && o["text"]["text"].is_string())
+        })
+    };
+    let options = resp
+        .get("options")
+        .cloned()
+        .filter(well_formed)
+        .unwrap_or_else(|| json!([]));
+    let groups = resp
+        .get("option_groups")
+        .cloned()
+        .filter(|g| {
+            g.as_array()
+                .is_some_and(|gs| gs.iter().all(|g| well_formed(&g["options"])))
+        })
+        .unwrap_or_else(|| json!([]));
+    Ok(json!({"ok": true, "options": options, "option_groups": groups}))
 }
 
 fn interaction_base(caller: &Caller, me: &User, app: &App, kind: &str) -> Value {
@@ -316,11 +429,12 @@ pub async fn views_current(state: &AppState, caller: &Caller, _args: &Args) -> A
     Ok(json!({"ok": true, "views": views}))
 }
 
-/// Installed apps whose bot was granted `commands`, with their slash commands.
+/// Installed apps whose bot was granted `commands` (needed for slash commands and shortcuts).
 async fn command_apps(state: &AppState, team_id: &str) -> ApiResult<Vec<App>> {
     let mut out = Vec::new();
     for app in state.store.list_apps(team_id).await? {
-        if !app.is_installed() || app.manifest().features.slash_commands.is_empty() {
+        let features = &app.manifest().features;
+        if !app.is_installed() || (features.slash_commands.is_empty() && features.shortcuts.is_empty()) {
             continue;
         }
         let granted = state
@@ -344,6 +458,97 @@ fn command_json(app: &App, c: &SlashCommand) -> Value {
         "app_id": app.id,
         "app_name": app.name,
     })
+}
+
+/// `emu.shortcuts.list`: global and message shortcuts available in the workspace.
+pub async fn shortcuts_list(state: &AppState, caller: &Caller, _args: &Args) -> ApiResult {
+    let mut shortcuts = Vec::new();
+    for app in command_apps(state, &caller.team.id).await? {
+        if !app.manifest().interactivity_enabled() {
+            continue;
+        }
+        for sc in &app.manifest().features.shortcuts {
+            shortcuts.push(json!({
+                "app_id": app.id,
+                "app_name": app.name,
+                "name": sc.name,
+                "type": sc.kind,
+                "callback_id": sc.callback_id,
+                "description": sc.description,
+            }));
+        }
+    }
+    Ok(json!({"ok": true, "shortcuts": shortcuts}))
+}
+
+/// `emu.shortcuts.run`: runs a global shortcut (`shortcut`), or a message
+/// shortcut (`message_action`) on the message at `channel` / `message_ts`.
+pub async fn shortcut_run(state: &AppState, caller: &Caller, args: &Args) -> ApiResult {
+    let me = caller.user()?;
+    let app_id = req_str(args, "app_id")?;
+    let callback_id = req_str(args, "callback_id")?;
+    let app = command_apps(state, &caller.team.id)
+        .await?
+        .into_iter()
+        .find(|a| a.id == app_id)
+        .ok_or_else(|| ApiError::from(slack_emu_core::SlackError::new("app_not_found")))?;
+    let app = interactive_app(state, Some(&app.id)).await?;
+    let Some(sc) = app
+        .manifest()
+        .features
+        .shortcuts
+        .iter()
+        .find(|s| s.callback_id == callback_id)
+        .cloned()
+    else {
+        return fail("shortcut_not_found");
+    };
+    let mut payload = interaction_base(
+        caller,
+        me,
+        &app,
+        if sc.kind == "message" {
+            "message_action"
+        } else {
+            "shortcut"
+        },
+    );
+    payload["callback_id"] = json!(sc.callback_id);
+    payload["action_ts"] = json!(state.clock.next());
+    payload["trigger_id"] = json!(interactions::trigger(state, &caller.team.id, &me.id, &app.id));
+    if sc.kind == "message" {
+        let a = visible(state, caller, args, "channel", None).await?;
+        let ts = args::req_ts(args, "message_ts")?;
+        let Some(msg) = state.store.get_message(&a.conv.id, &ts).await? else {
+            return fail("message_not_found");
+        };
+        let target = ResponseTarget {
+            team_id: caller.team.id.clone(),
+            app_id: app.id.clone(),
+            user_id: me.id.clone(),
+            channel_id: Some(a.conv.id.clone()),
+            source: Some(Source {
+                ts: msg.ts.clone(),
+                ephemeral: false,
+            }),
+        };
+        payload["channel"] = json!({"id": a.conv.id, "name": channel_name(&a.conv)});
+        payload["message_ts"] = json!(msg.ts);
+        payload["message"] = shapes::one_message(state, &msg).await?;
+        payload["response_url"] = json!(interactions::response_url(state, "actions", target));
+    }
+    let url = app.manifest().interactivity_url().map(str::to_owned);
+    let label = format!(
+        "{} ({})",
+        payload["type"].as_str().unwrap_or("shortcut"),
+        sc.callback_id
+    );
+    state
+        .delivery
+        .interact(&app, "interactive", label, payload, url)
+        .await
+        .map_err(dispatch_failed)?;
+    Ok(json!({"ok": true}))
 }
 
 /// `emu.commands.list`: slash commands available in the workspace.

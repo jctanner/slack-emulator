@@ -241,7 +241,8 @@ impl Delivery {
             Body::Form(vec![("payload".into(), payload.to_string())])
         };
         // Apps answer commands and view submissions in the ack.
-        let accepts_response_payload = kind == "slash_commands" || payload["type"] == "view_submission";
+        let accepts_response_payload = kind == "slash_commands"
+            || matches!(payload["type"].as_str(), Some("view_submission" | "block_suggestion"));
         let out = Outbound {
             kind,
             payload,

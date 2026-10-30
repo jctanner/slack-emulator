@@ -80,6 +80,7 @@ export function manifest(name, { socketMode, requestUrl, commands = [] } = {}) {
   if (requestUrl) {
     events.request_url = requestUrl
     interactivity.request_url = requestUrl
+    interactivity.message_menu_options_url = requestUrl
   }
   return {
     display_information: { name },
@@ -91,6 +92,10 @@ export function manifest(name, { socketMode, requestUrl, commands = [] } = {}) {
         description: `Test command ${command}`,
         ...(requestUrl ? { url: requestUrl } : {}),
       })),
+      shortcuts: [
+        { name: 'New ticket', type: 'global', callback_id: 'new_ticket', description: 'File a ticket' },
+        { name: 'Summarize', type: 'message', callback_id: 'summarize', description: 'Summarize it' },
+      ],
     },
     oauth_config: {
       scopes: {

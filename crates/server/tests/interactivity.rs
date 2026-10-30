@@ -765,3 +765,150 @@ async fn app_home_publish_and_open() {
     assert_eq!(opened["view"]["blocks"][0]["text"]["text"], "Welcome");
     assert_eq!(fake.next().await["event"]["view"]["id"], published["view"]["id"]);
 }
+
+#[tokio::test]
+async fn external_selects_load_options_from_the_app() {
+    let h = Harness::new().await;
+    let alice = h.signup("alice@example.com").await;
+    let general = general(&h, &alice).await;
+    let reply: Reply = Arc::new(|p| {
+        if p["type"] != "block_suggestion" {
+            return ok_empty();
+        }
+        let q = p["value"].as_str().unwrap_or_default().to_owned();
+        let body = json!({"options": [
+            {"text": {"type": "plain_text", "text": format!("{q}-one")}, "value": "1"},
+            {"text": {"type": "plain_text", "text": format!("{q}-two")}, "value": "2"}
+        ]});
+        (StatusCode::OK, body.to_string())
+    });
+    let mut fake = fake_app(reply).await;
+    let options_url = format!("{}/interactive", fake.base);
+    let app = install(&h, &alice, &fake, |m| {
+        m["settings"]["interactivity"]["message_menu_options_url"] = json!(options_url);
+    })
+    .await;
+    let blocks = json!([{"type": "actions", "block_id": "pick", "elements": [
+        {"type": "external_select", "action_id": "ticket", "min_query_length": 2,
+         "placeholder": {"type": "plain_text", "text": "Ticket"}},
+        {"type": "button", "action_id": "go", "text": {"type": "plain_text", "text": "Go"}}
+    ]}]);
+    let posted = h
+        .ok(
+            &app.token,
+            "chat.postMessage",
+            json!({"channel": general, "text": "pick", "blocks": blocks}),
+        )
+        .await;
+    let container = json!({"type": "message", "channel_id": general, "message_ts": posted["ts"]});
+
+    let r = h
+        .ok(
+            &alice,
+            "emu.blocks.suggest",
+            json!({"container": container, "block_id": "pick", "action_id": "ticket", "value": "bug"}),
+        )
+        .await;
+    assert_eq!(r["options"][0]["text"]["text"], "bug-one");
+    let p = fake.next().await;
+    assert_eq!(p["type"], "block_suggestion");
+    assert_eq!(p["action_id"], "ticket");
+    assert_eq!(p["value"], "bug");
+    assert_eq!(p["container"]["message_ts"], posted["ts"]);
+
+    // Only external selects load options.
+    h.err(
+        &alice,
+        "emu.blocks.suggest",
+        json!({"container": container, "block_id": "pick", "action_id": "go", "value": "x"}),
+        "invalid_arguments",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn shortcuts_send_triggers_and_message_context() {
+    let h = Harness::new().await;
+    let alice = h.signup("alice@example.com").await;
+    let general = general(&h, &alice).await;
+    let mut fake = fake_app(Arc::new(|_| ok_empty())).await;
+    let app = install(&h, &alice, &fake, |m| {
+        m["features"]["shortcuts"] = json!([
+            {"name": "New ticket", "type": "global", "callback_id": "new_ticket", "description": "File a ticket"},
+            {"name": "Summarize", "type": "message", "callback_id": "summarize", "description": "Summarize this"}
+        ]);
+    })
+    .await;
+
+    let listed = h.ok(&alice, "emu.shortcuts.list", json!({})).await;
+    let names: Vec<&str> = listed["shortcuts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["callback_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["new_ticket", "summarize"]);
+
+    h.ok(
+        &alice,
+        "emu.shortcuts.run",
+        json!({"app_id": app.app_id, "callback_id": "new_ticket"}),
+    )
+    .await;
+    let p = fake.next().await;
+    assert_eq!(p["type"], "shortcut");
+    assert_eq!(p["callback_id"], "new_ticket");
+    // The trigger opens a modal, as apps do from shortcuts.
+    let modal = json!({"type": "modal", "title": {"type": "plain_text", "text": "Ticket"}, "blocks": []});
+    h.ok(
+        &app.token,
+        "views.open",
+        json!({"trigger_id": p["trigger_id"], "view": modal}),
+    )
+    .await;
+
+    let posted = h
+        .ok(
+            &alice,
+            "chat.postMessage",
+            json!({"channel": general, "text": "long discussion"}),
+        )
+        .await;
+    h.ok(
+        &alice,
+        "emu.shortcuts.run",
+        json!({"app_id": app.app_id, "callback_id": "summarize", "channel": general, "message_ts": posted["ts"]}),
+    )
+    .await;
+    let p = fake.next().await;
+    assert_eq!(p["type"], "message_action");
+    assert_eq!(p["message"]["text"], "long discussion");
+    assert_eq!(p["channel"]["id"], general.as_str());
+    // Its response URL answers in the conversation.
+    let hook = hook_path(p["response_url"].as_str().unwrap());
+    h.post_json(
+        &hook,
+        None,
+        json!({"response_type": "in_channel", "text": "Summary: it was long"}),
+    )
+    .await;
+    let history = h
+        .ok(&alice, "conversations.history", json!({"channel": general, "limit": 1}))
+        .await;
+    assert_eq!(history["messages"][0]["text"], "Summary: it was long");
+
+    // Manifests are checked: shortcuts need interactivity.
+    let bad = h
+        .call(
+            &alice,
+            "apps.manifest.validate",
+            json!({"manifest": {
+                "display_information": {"name": "x"},
+                "features": {"bot_user": {"display_name": "x"},
+                             "shortcuts": [{"name": "s", "type": "global", "callback_id": "s", "description": "s"}]},
+                "oauth_config": {"scopes": {"bot": ["commands"]}}
+            }}),
+        )
+        .await;
+    assert_eq!(bad["errors"][0]["pointer"], "/settings/interactivity/is_enabled");
+}

@@ -61,6 +61,11 @@ features:
       description: Say hello
       usage_hint: "[name]"
       # url: https://your-bot.example/slack/events   # for HTTP delivery
+  shortcuts:
+    - name: Say hi
+      type: global
+      callback_id: say_hi
+      description: Opens a greeting from the app
 oauth_config:
   scopes:
     bot:
@@ -249,6 +254,7 @@ function AppDetail({ id }: { id: string }) {
     try {
       const r = await call(method, { app_id: id, ...args })
       done?.(r)
+      store.appsChanged()
       await refresh()
     } catch (e: any) {
       setNote(`${method} failed: ${e.code ?? e}`)
@@ -474,6 +480,7 @@ function AppDetail({ id }: { id: string }) {
             if (r.response_metadata?.messages?.length) msgs.push(`Request URL not verified: ${r.response_metadata.messages.join(' ')}`)
             setNote(msgs.join(' ') || undefined)
             setEditing(false)
+            store.appsChanged()
             await refresh()
           }}
         />

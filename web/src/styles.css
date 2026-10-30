@@ -1785,6 +1785,89 @@ button.primary-small {
   color: var(--muted);
 }
 
+/* ---------- external selects and shortcuts ---------- */
+
+.bk-external {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.bk-options {
+  left: 0;
+  right: auto;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* A modal's body scrolls and would clip a floating menu, so menus flow inline there. */
+.bk-modal .bk-menu {
+  position: static;
+  width: 100%;
+  margin-top: 4px;
+  box-shadow: none;
+}
+
+.bk-options-status {
+  padding: 6px 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.shortcut-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.shortcut-list {
+  min-width: 240px;
+}
+
+.composer-shortcuts .shortcut-list {
+  left: 0;
+  right: auto;
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.message-actions .shortcut-list {
+  right: 0;
+}
+
+.message-actions .shortcut-list button {
+  width: 100%;
+  height: auto;
+  border-radius: 0;
+  padding: 6px 14px;
+  text-align: left;
+  align-items: flex-start;
+}
+
+.bk-menu.shortcut-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.shortcut-name {
+  font-weight: 600;
+}
+
+.shortcut-desc {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.composer-shortcuts > button {
+  border: 0;
+  background: none;
+  font-size: 17px;
+  padding: 2px 6px;
+  color: var(--muted);
+}
+
 /* ---------- inspector ---------- */
 
 .inspector {

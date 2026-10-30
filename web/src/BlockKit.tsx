@@ -445,15 +445,17 @@ function Element({ el, blockId, s, dispatchOnChange }: { el: Block; blockId: str
         </button>
       )
       break
-    case 'static_select':
     case 'external_select':
+    case 'multi_external_select':
+      node = <ExternalSelect {...props} />
+      break
+    case 'static_select':
     case 'users_select':
     case 'conversations_select':
     case 'channels_select':
       node = <SingleSelect {...props} />
       break
     case 'multi_static_select':
-    case 'multi_external_select':
     case 'multi_users_select':
     case 'multi_conversations_select':
     case 'multi_channels_select':
@@ -617,13 +619,6 @@ function SingleSelect({ el, value, change, busy }: ElementProps) {
   const key = selectKey(el.type)
   const isOption = key === 'selected_option'
   const current = isOption ? (value?.[key]?.value ?? '') : (value?.[key] ?? '')
-  if (el.type === 'external_select') {
-    return (
-      <select className="bk-field bk-select" disabled title="External option sources aren’t supported in slack-emu yet">
-        <option>{plain(el.placeholder) || 'Select an item'}</option>
-      </select>
-    )
-  }
   const groups = [...new Set(items.map((i) => i.group))]
   const option = (i: Item) => (
     <option key={i.value} value={i.value}>
@@ -675,21 +670,116 @@ function MultiSelect({ el, value, change }: ElementProps) {
           </button>
         </span>
       ))}
-      {el.type === 'multi_external_select' ? (
-        <span className="bk-unsupported">External option sources aren’t supported yet.</span>
-      ) : (
-        !full && (
-          <select className="bk-field bk-select" value="" onChange={(e) => e.target.value && set([...selected, e.target.value])}>
-            <option value="">{plain(el.placeholder) || 'Select items'}</option>
-            {items
-              .filter((i) => !selected.includes(i.value))
-              .map((i) => (
-                <option key={i.value} value={i.value}>
-                  {i.group ? `${i.group}: ${i.label}` : i.label}
-                </option>
-              ))}
-          </select>
-        )
+      {!full && (
+        <select className="bk-field bk-select" value="" onChange={(e) => e.target.value && set([...selected, e.target.value])}>
+          <option value="">{plain(el.placeholder) || 'Select items'}</option>
+          {items
+            .filter((i) => !selected.includes(i.value))
+            .map((i) => (
+              <option key={i.value} value={i.value}>
+                {i.group ? `${i.group}: ${i.label}` : i.label}
+              </option>
+            ))}
+        </select>
+      )}
+    </div>
+  )
+}
+
+/**
+ * An `external_select`: options come from the app (`block_suggestion`) as
+ * the person types, once they've typed `min_query_length` characters (3 by default).
+ */
+function ExternalSelect({ el, value, change, s, blockId }: ElementProps) {
+  const { store } = useWs()
+  const multi = el.type === 'multi_external_select'
+  const selected: Block[] = multi ? (value?.selected_options ?? []) : value?.selected_option ? [value.selected_option] : []
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const [options, setOptions] = useState<Block[]>([])
+  const [status, setStatus] = useState<string>()
+  const minLength = el.min_query_length ?? 3
+  const timer = useRef<number | undefined>(undefined)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const search = (q: string) => {
+    setQuery(q)
+    setOpen(true)
+    clearTimeout(timer.current)
+    if (q.length < minLength) {
+      setOptions([])
+      setStatus(minLength > 0 ? `Type at least ${minLength} characters` : undefined)
+      return
+    }
+    setStatus('Loading…')
+    timer.current = window.setTimeout(async () => {
+      try {
+        const r = await store.call<{ options: Block[]; option_groups: Block[] }>('emu.blocks.suggest', {
+          container: s.container,
+          block_id: blockId,
+          action_id: el.action_id,
+          value: q,
+        })
+        const all = [...r.options, ...r.option_groups.flatMap((g: Block) => g.options ?? [])]
+        setOptions(all)
+        setStatus(all.length ? undefined : 'No matches')
+      } catch (e) {
+        setOptions([])
+        setStatus(e instanceof ApiError && e.code === 'dispatch_failed' ? `The app didn’t answer (${e.data.detail})` : 'Couldn’t load options')
+      }
+    }, 250)
+  }
+
+  const pick = (o: Block) => {
+    setOpen(false)
+    setQuery('')
+    if (multi) {
+      if (!selected.some((x) => x.value === o.value)) change({ type: el.type, selected_options: [...selected, o] })
+    } else change({ type: el.type, selected_option: o })
+  }
+
+  return (
+    <div className="bk-external" ref={ref}>
+      {multi &&
+        selected.map((o) => (
+          <span key={o.value} className="bk-chip">
+            {plain(o.text)}
+            <button
+              type="button"
+              aria-label="Remove"
+              onClick={() => change({ type: el.type, selected_options: selected.filter((x) => x.value !== o.value) })}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      <input
+        className="bk-field bk-select"
+        role="combobox"
+        aria-expanded={open}
+        value={query}
+        placeholder={!multi && selected[0] ? plain(selected[0].text) : plain(el.placeholder) || 'Search'}
+        onFocus={() => search(query)}
+        onChange={(e) => search(e.target.value)}
+      />
+      {open && (
+        <ul className="bk-menu bk-options" role="listbox">
+          {options.map((o) => (
+            <li key={o.value}>
+              <button type="button" role="option" aria-selected={selected.some((x) => x.value === o.value)} onClick={() => pick(o)}>
+                {plain(o.text)}
+              </button>
+            </li>
+          ))}
+          {status && <li className="bk-options-status">{status}</li>}
+        </ul>
       )}
     </div>
   )

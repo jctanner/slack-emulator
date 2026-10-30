@@ -34,6 +34,22 @@ pub struct Features {
     pub slash_commands: Vec<SlashCommand>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_home: Option<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shortcuts: Vec<Shortcut>,
+}
+
+/// A global shortcut (from the shortcuts menu) or message shortcut (from a message's actions).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct Shortcut {
+    #[serde(default)]
+    pub name: String,
+    /// `global` or `message`.
+    #[serde(rename = "type", default)]
+    pub kind: String,
+    #[serde(default)]
+    pub callback_id: String,
+    #[serde(default)]
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -238,6 +254,16 @@ impl Manifest {
         self.settings.interactivity.as_ref().is_some_and(|i| i.is_enabled)
     }
 
+    /// Where `block_suggestion` requests go over HTTP.
+    pub fn options_url(&self) -> Option<&str> {
+        self.settings
+            .interactivity
+            .as_ref()
+            .filter(|i| i.is_enabled)
+            .and_then(|i| i.message_menu_options_url.as_deref())
+            .filter(|u| !u.is_empty())
+    }
+
     pub fn slash_command(&self, command: &str) -> Option<&SlashCommand> {
         self.features.slash_commands.iter().find(|c| c.command == command)
     }
@@ -320,10 +346,38 @@ impl Manifest {
                 );
             }
         }
-        if !self.features.slash_commands.is_empty() && !self.bot_scopes().iter().any(|s| s == "commands") {
+        for (i, sc) in self.features.shortcuts.iter().enumerate() {
+            let at = |field: &str| format!("/features/shortcuts/{i}/{field}");
+            if !matches!(sc.kind.as_str(), "global" | "message") {
+                err(&at("type"), "Shortcut type must be global or message.".into());
+            }
+            if sc.name.trim().is_empty() || sc.name.chars().count() > 24 {
+                err(&at("name"), "Shortcut names are 1 to 24 characters.".into());
+            }
+            if sc.callback_id.trim().is_empty() || sc.callback_id.chars().count() > 255 {
+                err(
+                    &at("callback_id"),
+                    "Shortcuts need a callback_id (up to 255 characters).".into(),
+                );
+            }
+            if sc.description.trim().is_empty() || sc.description.chars().count() > 150 {
+                err(
+                    &at("description"),
+                    "Shortcut descriptions are 1 to 150 characters.".into(),
+                );
+            }
+        }
+        let needs_commands = !self.features.slash_commands.is_empty() || !self.features.shortcuts.is_empty();
+        if needs_commands && !self.bot_scopes().iter().any(|s| s == "commands") {
             err(
                 "/oauth_config/scopes/bot",
-                "Slash commands require the commands scope.".into(),
+                "Slash commands and shortcuts require the commands scope.".into(),
+            );
+        }
+        if !self.features.shortcuts.is_empty() && !self.interactivity_enabled() {
+            err(
+                "/settings/interactivity/is_enabled",
+                "Shortcuts need interactivity turned on.".into(),
             );
         }
         if self.interactivity_enabled() && !self.settings.socket_mode_enabled && self.interactivity_url().is_none() {

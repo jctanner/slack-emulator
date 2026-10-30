@@ -136,6 +136,15 @@ export type SlashCommand = {
   app_name: string
 }
 
+export type Shortcut = {
+  app_id: string
+  app_name: string
+  name: string
+  type: 'global' | 'message'
+  callback_id: string
+  description: string
+}
+
 export type AppHomeInfo = {
   id: string
   name: string

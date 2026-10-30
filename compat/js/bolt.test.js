@@ -71,6 +71,34 @@ function handlers(app, prefix) {
     await ack()
     await client.chat.postMessage({ channel: view.private_metadata, text: `<@${body.user.id}> opened: ${title}` })
   })
+  app.shortcut('summarize', async ({ ack, shortcut, respond }) => {
+    await ack()
+    await respond({ response_type: 'in_channel', text: `Summary of: ${shortcut.message.text}` })
+  })
+  app.shortcut('new_ticket', async ({ ack, body, client }) => {
+    await ack()
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'lookup',
+        title: { type: 'plain_text', text: 'Find a ticket' },
+        submit: { type: 'plain_text', text: 'Open' },
+        blocks: [
+          {
+            type: 'input',
+            block_id: 'ticket',
+            label: { type: 'plain_text', text: 'Ticket' },
+            element: { type: 'external_select', action_id: 'ticket_lookup', min_query_length: 2 },
+          },
+        ],
+      },
+    })
+  })
+  app.options('ticket_lookup', async ({ ack, payload }) => {
+    const q = payload.value
+    await ack({ options: [1, 2].map((n) => ({ text: { type: 'plain_text', text: `${q}-${n}` }, value: String(n) })) })
+  })
   app.event('app_home_opened', async ({ event, client }) => {
     if (event.tab !== 'home') return
     await client.views.publish({
@@ -80,7 +108,7 @@ function handlers(app, prefix) {
   })
 }
 
-async function exercise(person, botUser, prefix) {
+async function exercise(person, botUser, prefix, appId) {
   const general = await person.channelId('general')
   await person.api('conversations.invite', { channel: general, users: botUser })
 
@@ -126,6 +154,29 @@ async function exercise(person, botUser, prefix) {
   assert.deepEqual((await person.api('emu.views.current')).views, [])
   await person.waitForMessage(general, (m) => m.user === botUser && m.text === `<@${person.userId}> opened: Broken build`)
 
+  // A message shortcut answers through its response URL.
+  const long = await person.api('chat.postMessage', { channel: general, text: 'a very long discussion' })
+  await person.api('emu.shortcuts.run', { app_id: appId, callback_id: 'summarize', channel: general, message_ts: long.ts })
+  await person.waitForMessage(general, (m) => m.text === 'Summary of: a very long discussion')
+
+  // A global shortcut opens a modal whose external select asks the app for options.
+  await person.api('emu.shortcuts.run', { app_id: appId, callback_id: 'new_ticket' })
+  const lookup = await waitUntil(
+    async () => (await person.api('emu.views.current')).views.find((v) => v.callback_id === 'lookup'),
+    'the lookup modal',
+  )
+  const found = await person.api('emu.blocks.suggest', {
+    container: { type: 'view', view_id: lookup.id },
+    block_id: 'ticket',
+    action_id: 'ticket_lookup',
+    value: 'bug',
+  })
+  assert.deepEqual(
+    found.options.map((o) => o.text.text),
+    ['bug-1', 'bug-2'],
+  )
+  await person.api('emu.views.close', { view_id: lookup.id, all: true })
+
   // App Home: opening the tab makes the app publish a view.
   const dm = (await person.api('conversations.open', { users: botUser })).channel.id
   await person.api('emu.apps.home', { channel: dm, tab: 'home' })
@@ -161,7 +212,7 @@ test('socket mode', async () => {
   handlers(app, prefix)
   await app.start()
   try {
-    await exercise(alice, install.bot_user_id, prefix)
+    await exercise(alice, install.bot_user_id, prefix, app_id)
   } finally {
     await app.stop()
   }
@@ -189,7 +240,7 @@ test('http events', async () => {
   try {
     const verified = await alice.api('emu.apps.verifyUrl', { app_id: created.app_id })
     assert.equal(verified.verified, true, JSON.stringify(verified))
-    await exercise(alice, install.bot_user_id, prefix)
+    await exercise(alice, install.bot_user_id, prefix, created.app_id)
   } finally {
     await app.stop()
   }

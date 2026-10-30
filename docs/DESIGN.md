@@ -411,6 +411,16 @@ docs/
     uploaded page can't run scripts on the emulator's origin.
   - Events: `file_shared` (per channel) and `file_deleted`. `file_created`,
     file comments, remote files and public file links aren't emulated.
+- Milestone 7, external selects and shortcuts (2026-10-29):
+  - `block_suggestion` goes over Socket Mode, or over HTTP to
+    `settings.interactivity.message_menu_options_url`. Like Slack, the UI
+    asks only once `min_query_length` characters are typed (3 by default).
+  - Shortcuts come from `features.shortcuts` in the manifest. As on Slack,
+    they need the `commands` scope and interactivity, checked at validation.
+    Message shortcuts get a `response_url` for the message's conversation.
+  - Clients refresh their slash command and shortcut lists when apps
+    change: install and uninstall (`user_change` for the bot user) and edits
+    on the Apps page.
 - `client.counts` (an undocumented method from Slack's own web client) drives
   the unread state in the sidebar. Events Slack doesn't have are prefixed
   `emu_` and are never delivered to apps.

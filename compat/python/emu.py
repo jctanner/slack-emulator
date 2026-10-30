@@ -138,6 +138,7 @@ def manifest(name: str, *, socket_mode: bool, request_url: str | None = None, co
     if request_url:
         events["request_url"] = request_url
         interactivity["request_url"] = request_url
+        interactivity["message_menu_options_url"] = request_url
     slash_commands = [
         {"command": c, "description": f"Test command {c}", **({"url": request_url} if request_url else {})}
         for c in commands
@@ -148,6 +149,10 @@ def manifest(name: str, *, socket_mode: bool, request_url: str | None = None, co
             "bot_user": {"display_name": name, "always_online": True},
             "app_home": {"home_tab_enabled": True, "messages_tab_enabled": True},
             "slash_commands": slash_commands,
+            "shortcuts": [
+                {"name": "New ticket", "type": "global", "callback_id": "new_ticket", "description": "File a ticket"},
+                {"name": "Summarize", "type": "message", "callback_id": "summarize", "description": "Summarize it"},
+            ],
         },
         "oauth_config": {
             "scopes": {

@@ -6,7 +6,7 @@ use it through a Slack-like web UI in any desktop or mobile browser.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the architecture and roadmap.
 
-**Status: milestone 7 in progress (files done).** Accounts and multiple workspaces;
+**Status: milestone 7 in progress (files, external selects and shortcuts done).** Accounts and multiple workspaces;
 public and private channels, DMs and group DMs, threads, reactions, unread
 tracking and live updates in a responsive web UI. Apps are created from Slack
 app manifests and installed for bot tokens with enforced scopes. Events are
@@ -45,8 +45,11 @@ and `clear`), `view_closed`, and slash commands. Response URLs support
 `[ERROR] … [json-pointer:…]` messages) and missing `block_id`/`action_id`s are
 filled in.
 
-Not yet: `external_select` option loading (`block_suggestion`), shortcuts,
-file inputs and workflow buttons render but don't work.
+External selects load their options from the app as people type
+(`block_suggestion`, answered with `app.options` in Bolt), and global and
+message shortcuts (`shortcut`, `message_action`) run from the composer's ⚡
+menu and a message's "⋯" menu. File inputs and workflow buttons render but
+don't work yet.
 
 Storage is SQLite by default or Postgres, with the same behaviour (the
 whole test suite runs on both).
@@ -57,9 +60,9 @@ cards. `url_private` downloads need a token with `files:read` or a signed-in
 session, as on Slack (the emulator answers 401 rather than Slack's login
 page).
 
-Next up in milestone 7: `external_select` options and shortcuts, then pins,
-bookmarks, scheduled messages, user groups and search; OAuth, OIDC sign-in
-and retention policies last (see [the roadmap](docs/DESIGN.md#milestones)).
+Next up in milestone 7: pins, bookmarks, scheduled messages, user groups and
+search; OAuth, OIDC sign-in and retention policies last (see
+[the roadmap](docs/DESIGN.md#milestones)).
 
 ## Run it
 
@@ -180,8 +183,9 @@ slash commands, as on Slack. Response URL posts appear in the event log as
 
 Scripts and tests can act as a person through the same session-authenticated
 methods the web UI uses: `chat.command`, `emu.blocks.action`,
-`emu.views.submit`, `emu.views.close`, `emu.views.current` and
-`emu.apps.home` (see `compat/` for examples).
+`emu.views.submit`, `emu.views.close`, `emu.views.current`, `emu.blocks.suggest`,
+`emu.shortcuts.list`, `emu.shortcuts.run` and `emu.apps.home` (see `compat/`
+for examples).
 
 ## Testing bots in CI
 

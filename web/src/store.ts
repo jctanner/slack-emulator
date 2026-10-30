@@ -4,7 +4,7 @@
 // realtime events.
 
 import { useSyncExternalStore } from 'react'
-import { slack, slackAll, type Conversation, type Counts, type Message, type SlackUser, type SlashCommand, type View } from './api'
+import { slack, slackAll, type Conversation, type Counts, type Message, type Shortcut, type SlackUser, type SlashCommand, type View } from './api'
 
 export type MessageList = { msgs: Message[]; hasMore: boolean; cursor?: string; loading: boolean }
 
@@ -27,6 +27,8 @@ export type WorkspaceState = {
   modals: View[]
   /** App Home views by app ID. */
   homeViews: Record<string, View>
+  /** Bumped when apps change (installs, manifest edits), so command and shortcut lists refresh. */
+  appsVersion: number
 }
 
 type Listener = () => void
@@ -49,6 +51,7 @@ export class WorkspaceStore {
       ephemerals: {},
       modals: [],
       homeViews: {},
+      appsVersion: 0,
     }
   }
 
@@ -97,8 +100,26 @@ export class WorkspaceStore {
     return r.commands
   }
 
+  /** Forgets cached commands and shortcuts after apps change. */
+  appsChanged() {
+    this.commands = undefined
+    this.shortcutList = undefined
+    this.set((s) => ({ appsVersion: s.appsVersion + 1 }))
+  }
+
   setHomeView(appId: string, view: View) {
     this.set((s) => ({ homeViews: { ...s.homeViews, [appId]: view } }))
+  }
+
+  private shortcutList?: { list: Promise<Shortcut[]>; at: number }
+
+  /** Shortcuts from installed apps (cached briefly; every message's menu asks at once). */
+  shortcuts(): Promise<Shortcut[]> {
+    if (this.shortcutList && Date.now() - this.shortcutList.at < 15_000) return this.shortcutList.list
+    const list = this.call<{ shortcuts: Shortcut[] }>('emu.shortcuts.list').then((r) => r.shortcuts)
+    this.shortcutList = { list, at: Date.now() }
+    list.catch(() => (this.shortcutList = undefined))
+    return list
   }
 
   dismissEphemeral(channel: string, ts: string) {
@@ -347,6 +368,8 @@ export class WorkspaceStore {
       case 'team_join':
       case 'user_change':
         this.set((st) => ({ users: { ...st.users, [ev.user.id]: ev.user } }))
+        // Installing or removing an app announces its bot user.
+        if (ev.user.is_bot) this.appsChanged()
         return
       case 'emu_ephemeral': {
         const msg: Message = { ...ev.message, is_ephemeral: true }

@@ -5,6 +5,7 @@ import { searchEmoji } from './emoji'
 import { displayName, encodeOutgoing } from './mrkdwn'
 import { useWorkspace } from './store'
 import { Avatar } from './Avatar'
+import { ShortcutMenu } from './Shortcuts'
 
 // Unsent text per conversation/thread, kept while the app is open.
 const drafts = new Map<string, string>()
@@ -334,6 +335,7 @@ export function Composer({
           <button className="attach" onClick={() => filePicker.current?.click()} aria-label="Attach files" title="Attach files">
             📎︎
           </button>
+          <ShortcutMenu type="global" className="composer-shortcuts" label="Shortcuts" />
           {broadcastLabel ? (
             <label className="broadcast">
               <input type="checkbox" checked={broadcast} onChange={(e) => setBroadcast(e.target.checked)} />
