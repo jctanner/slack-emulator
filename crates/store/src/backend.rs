@@ -21,7 +21,7 @@ macro_rules! sql_store {
         use slack_emu_core::now;
         use sqlx::{Arguments, Row};
 
-        use crate::{ConversationQuery, IdentityMatch, Result, Store, StoreError, TsRange};
+        use crate::{ConversationQuery, IdentityMatch, MessageSearch, Result, Store, StoreError, TsRange};
 
         /// Messages that show at channel level: top-level posts, thread parents and broadcast replies.
         const CHANNEL_LEVEL: &str = "(x.thread_ts IS NULL OR x.thread_ts = x.ts OR x.reply_broadcast = TRUE)";
@@ -1170,6 +1170,52 @@ macro_rules! sql_store {
                     }
                 }
                 Ok(out)
+            }
+
+            async fn search_messages(&self, q: &MessageSearch<'_>) -> Result<Vec<Message>> {
+                let mut args = <$args>::default();
+                let mut sql = "SELECT x.* FROM messages x JOIN conversations c ON c.id = x.channel_id
+                     WHERE c.team_id = ?
+                       AND ((c.is_private = FALSE AND c.is_im = FALSE AND c.is_mpim = FALSE)
+                            OR EXISTS (SELECT 1 FROM conversation_members m WHERE m.conversation_id = c.id AND m.user_id = ?))
+                       AND (x.subtype IS NULL OR x.subtype IN ('bot_message', 'thread_broadcast', 'me_message', 'file_share'))"
+                    .to_owned();
+                args.add(q.team_id).expect("bind");
+                args.add(q.viewer).expect("bind");
+                for term in &q.terms {
+                    // Literal match: escape LIKE's wildcards.
+                    let escaped = term
+                        .to_lowercase()
+                        .replace('\\', "\\\\")
+                        .replace('%', "\\%")
+                        .replace('_', "\\_");
+                    sql.push_str(" AND lower(x.text) LIKE ? ESCAPE '\\'");
+                    args.add(format!("%{escaped}%")).expect("bind");
+                }
+                if let Some(c) = &q.channel_id {
+                    sql.push_str(" AND x.channel_id = ?");
+                    args.add(c.clone()).expect("bind");
+                }
+                if let Some(u) = &q.user_id {
+                    sql.push_str(" AND x.user_id = ?");
+                    args.add(u.clone()).expect("bind");
+                }
+                if let Some(a) = &q.after {
+                    sql.push_str(" AND x.ts >= ?");
+                    args.add(a.clone()).expect("bind");
+                }
+                if let Some(b) = &q.before {
+                    sql.push_str(" AND x.ts < ?");
+                    args.add(b.clone()).expect("bind");
+                }
+                sql.push_str(" ORDER BY x.ts DESC LIMIT ?");
+                args.add(q.limit).expect("bind");
+                Ok(sqlx::query_with(prep(&sql), args)
+                    .fetch_all(&self.pool)
+                    .await?
+                    .into_iter()
+                    .map(message_row)
+                    .collect())
             }
 
             async fn max_ts(&self) -> Result<Option<String>> {

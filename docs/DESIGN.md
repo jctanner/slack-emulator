@@ -449,6 +449,16 @@ docs/
     enable), `subteam_members_changed` (the whole workspace) and
     `subteam_self_added`/`subteam_self_removed` (the person affected).
   - Anyone may manage groups. Slack's admin-only setting isn't emulated.
+- Milestone 7, search (2026-10-29):
+  - Terms are case-insensitive substrings that must all match. There's no
+    relevance ranking, so `sort=score` orders by time like `timestamp`.
+    `highlight` markers aren't added.
+  - Results cover public channels and the searcher's conversations, and
+    skip system messages. `after:` excludes its day and `before:` excludes
+    its day, as on Slack. Dates are UTC.
+  - Search is for people: the web UI and user tokens with `search:read`.
+    Methods can now be marked "people only" in the method table, so bot
+    tokens get `not_allowed_token_type` before any scope check.
 - `client.counts` (an undocumented method from Slack's own web client) drives
   the unread state in the sidebar. Events Slack doesn't have are prefixed
   `emu_` and are never delivered to apps.

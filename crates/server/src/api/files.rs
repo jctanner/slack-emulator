@@ -406,46 +406,19 @@ pub async fn list(state: &AppState, caller: &Caller, a: &Args) -> ApiResult {
         .filter(|n| *n > 0)
         .unwrap_or(1);
 
-    let all = state.store.list_files(&caller.team.id).await?;
-    let ids: Vec<String> = all.iter().map(|f| f.id.clone()).collect();
-    let shares = state.store.file_shares(&ids).await?;
-    let me = caller.user()?;
-    let mut seen_convs: HashMap<String, bool> = HashMap::new();
-    let mut matching = Vec::new();
-    for f in all {
-        let mine: Vec<FileShare> = shares.iter().filter(|s| s.file_id == f.id).cloned().collect();
-        if user.as_ref().is_some_and(|u| *u != f.user_id)
-            || !type_matches(&f, &types)
-            || ts_from.is_some_and(|t| (f.created as f64) < t)
-            || ts_to.is_some_and(|t| (f.created as f64) > t)
-            || channel
-                .as_ref()
-                .is_some_and(|c| !mine.iter().any(|s| s.channel_id == *c))
-        {
-            continue;
-        }
-        let mut visible = f.user_id == me.id;
-        for s in &mine {
-            if visible {
-                break;
-            }
-            let ok = match seen_convs.get(&s.channel_id) {
-                Some(ok) => *ok,
-                None => {
-                    let ok = match state.store.get_conversation(&s.channel_id).await? {
-                        Some(conv) => can_see_conversation(state, caller, &conv).await?,
-                        None => false,
-                    };
-                    seen_convs.insert(s.channel_id.clone(), ok);
-                    ok
-                }
-            };
-            visible = ok;
-        }
-        if visible {
-            matching.push((f, mine));
-        }
-    }
+    let matching: Vec<(File, Vec<FileShare>)> = visible_files(state, caller)
+        .await?
+        .into_iter()
+        .filter(|(f, mine)| {
+            !(user.as_ref().is_some_and(|u| *u != f.user_id)
+                || !type_matches(f, &types)
+                || ts_from.is_some_and(|t| (f.created as f64) < t)
+                || ts_to.is_some_and(|t| (f.created as f64) > t)
+                || channel
+                    .as_ref()
+                    .is_some_and(|c| !mine.iter().any(|s| s.channel_id == *c)))
+        })
+        .collect();
     let total = matching.len();
     let mut files = Vec::new();
     for (f, mine) in matching.iter().skip((page - 1) * count).take(count) {
@@ -456,6 +429,40 @@ pub async fn list(state: &AppState, caller: &Caller, a: &Args) -> ApiResult {
         "files": files,
         "paging": {"count": count, "total": total, "page": page, "pages": total.div_ceil(count).max(1)},
     }))
+}
+
+/// Completed files the caller may see, newest first, with where each was shared.
+pub(super) async fn visible_files(state: &AppState, caller: &Caller) -> ApiResult<Vec<(File, Vec<FileShare>)>> {
+    let all = state.store.list_files(&caller.team.id).await?;
+    let ids: Vec<String> = all.iter().map(|f| f.id.clone()).collect();
+    let shares = state.store.file_shares(&ids).await?;
+    let me = caller.user()?;
+    let mut seen_convs: HashMap<String, bool> = HashMap::new();
+    let mut out = Vec::new();
+    for f in all {
+        let mine: Vec<FileShare> = shares.iter().filter(|s| s.file_id == f.id).cloned().collect();
+        let mut visible = f.user_id == me.id;
+        for s in &mine {
+            if visible {
+                break;
+            }
+            visible = match seen_convs.get(&s.channel_id) {
+                Some(ok) => *ok,
+                None => {
+                    let ok = match state.store.get_conversation(&s.channel_id).await? {
+                        Some(conv) => can_see_conversation(state, caller, &conv).await?,
+                        None => false,
+                    };
+                    seen_convs.insert(s.channel_id.clone(), ok);
+                    ok
+                }
+            };
+        }
+        if visible {
+            out.push((f, mine));
+        }
+    }
+    Ok(out)
 }
 
 pub async fn delete(state: &AppState, caller: &Caller, a: &Args) -> ApiResult {

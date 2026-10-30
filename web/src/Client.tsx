@@ -10,6 +10,7 @@ import { ThreadPane } from './ThreadPane'
 import { Dialogs } from './Dialogs'
 import { AppsPage } from './AppsPage'
 import { InspectorPage } from './InspectorPage'
+import { SearchPage } from './SearchPage'
 import { Modals } from './ViewModal'
 import { WorkspaceDialog, initials } from './WorkspaceDialog'
 
@@ -72,7 +73,7 @@ function WorkspaceSession({
 }) {
   const { team } = membership
   const path = usePath()
-  const { channel, thread, apps, app, inspector } = parseClientPath(path)
+  const { channel, thread, apps, app, inspector, search } = parseClientPath(path)
   const isMobile = useMediaQuery(MOBILE)
   const { status, sendTyping, typingDone } = useRealtime(store)
   const ready = useWorkspace(store, (s) => s.ready)
@@ -86,7 +87,7 @@ function WorkspaceSession({
 
   // Desktop always shows a conversation: restore the last one, else #general.
   useEffect(() => {
-    if (!ready || channel || apps || inspector || isMobile) return
+    if (!ready || channel || apps || inspector || search || isMobile) return
     let last: string | null = null
     try {
       last = localStorage.getItem(lastChannelKey(team.id))
@@ -115,7 +116,7 @@ function WorkspaceSession({
   }, [counts, convs, users, channel, team.name, store])
 
   const ctx: WorkspaceCtx = { store, membership, sendTyping, typingDone, open, showDialog: setDialog }
-  const mobileView = thread ? 'thread' : channel || apps || inspector ? 'main' : 'nav'
+  const mobileView = thread ? 'thread' : channel || apps || inspector || search ? 'main' : 'nav'
 
   return (
     <WorkspaceContext.Provider value={ctx}>
@@ -152,6 +153,8 @@ function WorkspaceSession({
             <AppsPage key={app ?? 'list'} app={app} />
           ) : inspector ? (
             <InspectorPage />
+          ) : search ? (
+            <SearchPage />
           ) : channel ? (
             <ChannelView key={channel} channel={channel} />
           ) : (

@@ -6,7 +6,7 @@ use it through a Slack-like web UI in any desktop or mobile browser.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the architecture and roadmap.
 
-**Status: milestone 7 in progress (files, external selects, shortcuts, pins, bookmarks, scheduled messages and user groups done).** Accounts and multiple workspaces;
+**Status: milestone 7 in progress (files, external selects, shortcuts, pins, bookmarks, scheduled messages, user groups and search done).** Accounts and multiple workspaces;
 public and private channels, DMs and group DMs, threads, reactions, unread
 tracking and live updates in a responsive web UI. Apps are created from Slack
 app manifests and installed for bot tokens with enforced scopes. Events are
@@ -30,6 +30,7 @@ Web API methods:
 - `conversations.archive|close|create|history|info|invite|join|kick|leave|list|mark|members|open|rename|replies|setPurpose|setTopic|unarchive`
 - `files.getUploadURLExternal|completeUploadExternal|info|list|delete` (what `files_upload_v2` / `files.uploadV2` use; the retired `files.upload` answers `method_deprecated`, as on Slack)
 - `reactions.add|get|remove`
+- `search.messages|files|all` (people and user tokens; bots get `not_allowed_token_type`, as on Slack)
 - `users.conversations|info|list|lookupByEmail|profile.get`
 - `usergroups.create|disable|enable|list|update`, `usergroups.users.list|update`
 - `views.open|push|update|publish`
@@ -73,7 +74,12 @@ posted when due, even across restarts.
 User groups are managed from the account menu, suggested in the composer,
 and mentioning one (`<!subteam^S…|@handle>`) notifies its members.
 
-Next up in milestone 7: search; OAuth, OIDC sign-in and retention policies last (see
+Search (the box at the top of the sidebar) covers messages and files, with
+Slack's `in:`, `from:`, `before:`/`after:`/`on:`, `has:link`, `has:pin`,
+`is:thread` and quoted phrases.
+
+Still to do in milestone 7: the OAuth install flow, OIDC sign-in and message
+retention policies (see
 [the roadmap](docs/DESIGN.md#milestones)).
 
 ## Run it

@@ -16,6 +16,7 @@ mod methods;
 mod pins;
 mod reactions;
 mod scheduled;
+mod search;
 pub mod shapes;
 mod usergroups;
 mod users;

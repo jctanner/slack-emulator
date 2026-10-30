@@ -6,7 +6,7 @@ use slack_emu_core::ids::TokenKind;
 
 use super::{
     ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, pins, reactions, scheduled,
-    usergroups, users, views,
+    search, usergroups, users, views,
 };
 use crate::AppState;
 
@@ -21,6 +21,8 @@ pub enum Callers {
     AppToken,
     /// Only the web UI (emulator administration and Slack's internal client methods).
     Session,
+    /// People: the web UI and user (`xoxp-`) tokens, not bots (e.g. search).
+    People,
 }
 
 pub struct MethodSpec {
@@ -35,6 +37,14 @@ const fn m(name: &'static str, scopes: &'static [&'static str]) -> MethodSpec {
     MethodSpec {
         name,
         callers: Callers::Standard,
+        scopes,
+    }
+}
+
+const fn people(name: &'static str, scopes: &'static [&'static str]) -> MethodSpec {
+    MethodSpec {
+        name,
+        callers: Callers::People,
         scopes,
     }
 }
@@ -131,6 +141,9 @@ const METHODS: &[MethodSpec] = &[
     m("reactions.add", &["reactions:write"]),
     m("reactions.get", &["reactions:read"]),
     m("reactions.remove", &["reactions:write"]),
+    people("search.all", &["search:read"]),
+    people("search.files", &["search:read"]),
+    people("search.messages", &["search:read"]),
     m("team.info", &["team:read"]),
     m("usergroups.create", &["usergroups:write"]),
     m("usergroups.disable", &["usergroups:write"]),
@@ -164,6 +177,7 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
     let allowed = match spec.callers {
         Callers::AppToken => caller.token_kind() == Some(TokenKind::App),
         Callers::Session => caller.is_session(),
+        Callers::People => caller.is_session() || caller.token_kind() == Some(TokenKind::User),
         _ => caller.token_kind() != Some(TokenKind::App),
     };
     if !allowed {
@@ -246,6 +260,9 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
         "reactions.add" => reactions::add(s, c, a).await,
         "reactions.get" => reactions::get(s, c, a).await,
         "reactions.remove" => reactions::remove(s, c, a).await,
+        "search.all" => search::all(s, c, a).await,
+        "search.files" => search::files(s, c, a).await,
+        "search.messages" => search::messages(s, c, a).await,
         "team.info" => users::team_info(s, c, a).await,
         "usergroups.create" => usergroups::create(s, c, a).await,
         "usergroups.disable" => usergroups::disable(s, c, a).await,

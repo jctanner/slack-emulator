@@ -7,7 +7,7 @@ use slack_emu_core::models::{
 };
 use slack_emu_core::now;
 
-use crate::{ConversationQuery, Store, StoreError, TsRange};
+use crate::{ConversationQuery, MessageSearch, Store, StoreError, TsRange};
 
 pub(crate) async fn account_and_users(s: &dyn Store) {
     let ws = s.create_workspace("Acme", "acme").await.unwrap();
@@ -460,6 +460,77 @@ pub(crate) async fn usergroups(s: &dyn Store) {
     assert_eq!(s.counts_for_user(&b.id).await.unwrap()[0].mention_count, 1);
 }
 
+pub(crate) async fn search(s: &dyn Store) {
+    let ws = s.create_workspace("Acme", "acme").await.unwrap();
+    let a = s.create_user(new_user(&ws.id, "a")).await.unwrap();
+    let b = s.create_user(new_user(&ws.id, "b")).await.unwrap();
+    let public = s
+        .create_conversation(channel(&ws.id, "pub", false), std::slice::from_ref(&a.id))
+        .await
+        .unwrap();
+    let secret = s
+        .create_conversation(channel(&ws.id, "secret", true), std::slice::from_ref(&a.id))
+        .await
+        .unwrap();
+    s.insert_message(&msg(
+        &public.id,
+        "1000000001.000000",
+        &a.id,
+        "Deploy FAILED at 50%",
+        None,
+    ))
+    .await
+    .unwrap();
+    s.insert_message(&msg(&public.id, "1000000002.000000", &b.id, "deploy fixed", None))
+        .await
+        .unwrap();
+    s.insert_message(&msg(&secret.id, "1000000003.000000", &a.id, "secret deploy", None))
+        .await
+        .unwrap();
+    let mut join = msg(&public.id, "1000000004.000000", &b.id, "deploy has joined", None);
+    join.subtype = Some("channel_join".into());
+    s.insert_message(&join).await.unwrap();
+
+    fn q<'a>(team: &'a str, viewer: &'a str, terms: &[&str]) -> MessageSearch<'a> {
+        MessageSearch {
+            team_id: team,
+            viewer,
+            terms: terms.iter().map(|t| t.to_string()).collect(),
+            channel_id: None,
+            user_id: None,
+            after: None,
+            before: None,
+            limit: 100,
+        }
+    }
+    let texts = |v: Vec<Message>| v.into_iter().map(|m| m.text).collect::<Vec<_>>();
+    // Case-insensitive, newest first, no system messages; private only for members.
+    assert_eq!(
+        texts(s.search_messages(&q(&ws.id, &a.id, &["DEPLOY"])).await.unwrap()),
+        ["secret deploy", "deploy fixed", "Deploy FAILED at 50%"]
+    );
+    assert_eq!(
+        texts(s.search_messages(&q(&ws.id, &b.id, &["deploy"])).await.unwrap()),
+        ["deploy fixed", "Deploy FAILED at 50%"]
+    );
+    // All terms must match; wildcards are literal.
+    assert_eq!(
+        texts(s.search_messages(&q(&ws.id, &a.id, &["deploy", "50%"])).await.unwrap()),
+        ["Deploy FAILED at 50%"]
+    );
+    assert!(s.search_messages(&q(&ws.id, &a.id, &["5_%"])).await.unwrap().is_empty());
+    let mut filtered = q(&ws.id, &a.id, &["deploy"]);
+    filtered.user_id = Some(b.id.clone());
+    assert_eq!(texts(s.search_messages(&filtered).await.unwrap()), ["deploy fixed"]);
+    let mut dated = q(&ws.id, &a.id, &["deploy"]);
+    dated.channel_id = Some(public.id.clone());
+    dated.before = Some("1000000002.000000".into());
+    assert_eq!(
+        texts(s.search_messages(&dated).await.unwrap()),
+        ["Deploy FAILED at 50%"]
+    );
+}
+
 /// Declares one `#[tokio::test]` per conformance check, each with a store
 /// from `$make` (an `Option`: `None` skips, e.g. when no Postgres is configured).
 macro_rules! suite {
@@ -493,6 +564,11 @@ macro_rules! suite {
         async fn usergroups() {
             let Some(s) = $make else { return };
             $crate::conformance::usergroups(&s).await;
+        }
+        #[tokio::test]
+        async fn search() {
+            let Some(s) = $make else { return };
+            $crate::conformance::search(&s).await;
         }
         #[tokio::test]
         async fn sessions_expire() {

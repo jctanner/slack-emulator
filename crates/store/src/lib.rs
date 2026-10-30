@@ -56,6 +56,22 @@ pub struct ConversationQuery<'a> {
     pub limit: i64,
 }
 
+/// A message search (`search.messages`). Terms must all appear in the text,
+/// ignoring case. Results are visible to `viewer`: public channels and
+/// conversations they belong to.
+#[derive(Debug, Clone)]
+pub struct MessageSearch<'a> {
+    pub team_id: &'a str,
+    pub viewer: &'a str,
+    pub terms: Vec<String>,
+    pub channel_id: Option<String>,
+    pub user_id: Option<String>,
+    /// ts bounds: `after` inclusive, `before` exclusive.
+    pub after: Option<String>,
+    pub before: Option<String>,
+    pub limit: i64,
+}
+
 /// Login credentials looked up by provider and subject.
 #[derive(Debug, Clone)]
 pub struct IdentityMatch {
@@ -173,6 +189,8 @@ pub trait Store: Send + Sync + 'static {
     /// A thread's parent and replies, oldest first.
     async fn replies(&self, channel_id: &str, thread_ts: &str, range: &TsRange, limit: i64) -> Result<Vec<Message>>;
     async fn thread_summaries(&self, channel_id: &str, parents: &[String]) -> Result<HashMap<String, ThreadSummary>>;
+    /// Messages matching a search, newest first (people's messages, not system ones).
+    async fn search_messages(&self, q: &MessageSearch<'_>) -> Result<Vec<Message>>;
     /// Newest ts across all messages, for seeding the ts clock.
     async fn max_ts(&self) -> Result<Option<String>>;
 

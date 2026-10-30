@@ -32,9 +32,12 @@ export function parseClientPath(path: string): {
   apps?: boolean
   app?: string
   inspector?: boolean
+  search?: boolean
 } {
   const apps = /^\/client\/([A-Z0-9]+)\/apps(?:\/([A-Z0-9]+))?/.exec(path)
   if (apps) return { team: apps[1], apps: true, app: apps[2] }
+  const search = /^\/client\/([A-Z0-9]+)\/search/.exec(path)
+  if (search) return { team: search[1], search: true }
   const inspector = /^\/client\/([A-Z0-9]+)\/inspector/.exec(path)
   if (inspector) return { team: inspector[1], inspector: true }
   const m = /^\/client\/([A-Z0-9]+)(?:\/([A-Z0-9]+)(?:\/thread\/([0-9.]+))?)?/.exec(path)

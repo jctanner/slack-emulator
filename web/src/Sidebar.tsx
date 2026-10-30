@@ -112,6 +112,17 @@ export function Sidebar({
       </header>
       {status === 'reconnecting' && <div className="conn-banner">Reconnecting…</div>}
       <div className="sidebar-body">
+        <form
+          className="sidebar-search"
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const q = new FormData(e.currentTarget).get('q') as string
+            if (q.trim()) navigate(`${clientPath(team.id)}/search?q=${encodeURIComponent(q)}`)
+          }}
+        >
+          <input name="q" type="search" placeholder={`Search ${team.name}`} aria-label="Search" />
+        </form>
         <section className="sidebar-section">
           <h2>Channels</h2>
           {channels.map(row)}
