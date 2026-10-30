@@ -17,6 +17,7 @@ pub enum IdKind {
     Bot,
     File,
     View,
+    Usergroup,
 }
 
 impl IdKind {
@@ -30,6 +31,7 @@ impl IdKind {
             IdKind::Bot => 'B',
             IdKind::File => 'F',
             IdKind::View => 'V',
+            IdKind::Usergroup => 'S',
         }
     }
 }

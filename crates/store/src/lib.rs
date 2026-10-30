@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use slack_emu_core::models::{
     Account, ApiToken, App, Bookmark, Conversation, ConversationCounts, ConversationTypes, File, FileShare, Message,
-    NewConversation, NewUser, Pin, Reaction, ScheduledMessage, ThreadSummary, User, Workspace,
+    NewConversation, NewUser, Pin, Reaction, ScheduledMessage, ThreadSummary, User, Usergroup, Workspace,
 };
 
 pub use postgres::{PgStore, fresh_test_database};
@@ -221,6 +221,17 @@ pub trait Store: Send + Sync + 'static {
     async fn due_scheduled(&self, now: i64) -> Result<Vec<ScheduledMessage>>;
     /// Returns false if it was already gone (posted or deleted).
     async fn delete_scheduled(&self, id: &str) -> Result<bool>;
+
+    // User groups
+    async fn create_usergroup(&self, group: &Usergroup) -> Result<()>;
+    async fn get_usergroup(&self, id: &str) -> Result<Option<Usergroup>>;
+    async fn list_usergroups(&self, team_id: &str) -> Result<Vec<Usergroup>>;
+    /// Saves everything except the ID, team and creation details.
+    async fn update_usergroup(&self, group: &Usergroup) -> Result<()>;
+    /// Replaces the members.
+    async fn set_usergroup_members(&self, id: &str, users: &[String]) -> Result<()>;
+    /// Members of a group, sorted by user ID.
+    async fn usergroup_members(&self, id: &str) -> Result<Vec<String>>;
 
     // Reactions
     /// Returns false if the user had already reacted with that emoji.

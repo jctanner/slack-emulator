@@ -45,19 +45,23 @@ pub(crate) async fn link_names(state: &AppState, team_id: &str, text: &str, labe
                 let replacement = if c == '@' {
                     match word {
                         "here" | "channel" | "everyone" => Some(format!("<!{word}>")),
-                        _ => state
+                        _ => match state
                             .store
                             .list_users(team_id)
                             .await?
                             .into_iter()
                             .find(|u| u.name == word)
-                            .map(|u| {
-                                if labels {
-                                    format!("<@{}|{}>", u.id, u.name)
-                                } else {
-                                    format!("<@{}>", u.id)
-                                }
-                            }),
+                        {
+                            Some(u) if labels => Some(format!("<@{}|{}>", u.id, u.name)),
+                            Some(u) => Some(format!("<@{}>", u.id)),
+                            None => state
+                                .store
+                                .list_usergroups(team_id)
+                                .await?
+                                .into_iter()
+                                .find(|g| g.handle == word && g.disabled_at.is_none())
+                                .map(|g| format!("<!subteam^{}|@{}>", g.id, g.handle)),
+                        },
                     }
                 } else {
                     state

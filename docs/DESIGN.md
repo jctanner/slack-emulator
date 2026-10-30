@@ -438,6 +438,17 @@ docs/
   - `time_in_past` and `time_too_far` (more than 120 days ahead) match
     Slack. People and apps list and delete only their own. Slack's limit
     of 30 per channel per 5 minutes isn't enforced.
+- Milestone 7, user groups (2026-10-29):
+  - Group handles share a namespace with people's handles. `here`,
+    `channel` and `everyone` are reserved. Names and handles are unique
+    per workspace.
+  - Mentioning an enabled group counts as a mention for each member, in
+    `client.counts` and live in the UI. `link_names` turns `@handle` into
+    `<!subteam^S…|@handle>`.
+  - Events: `subteam_created`, `subteam_updated` (including disable and
+    enable), `subteam_members_changed` (the whole workspace) and
+    `subteam_self_added`/`subteam_self_removed` (the person affected).
+  - Anyone may manage groups. Slack's admin-only setting isn't emulated.
 - `client.counts` (an undocumented method from Slack's own web client) drives
   the unread state in the sidebar. Events Slack doesn't have are prefixed
   `emu_` and are never delivered to apps.

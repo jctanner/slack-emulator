@@ -429,11 +429,12 @@ function EditBox({ channel, msg, onDone }: { channel: string; msg: Message; onDo
   const { store } = useWs()
   const users = useWorkspace(store, (s) => s.users)
   const convs = useWorkspace(store, (s) => s.convs)
+  const groups = useWorkspace(store, (s) => s.usergroups)
   const [text, setText] = useState(() => decodeForEdit(msg.text, users, convs))
   const [busy, setBusy] = useState(false)
 
   const save = async () => {
-    const encoded = encodeOutgoing(text.trim(), users, convs)
+    const encoded = encodeOutgoing(text.trim(), users, convs, groups)
     if (!encoded || encoded === msg.text) return onDone()
     setBusy(true)
     try {

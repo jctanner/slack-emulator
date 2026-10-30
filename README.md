@@ -6,7 +6,7 @@ use it through a Slack-like web UI in any desktop or mobile browser.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the architecture and roadmap.
 
-**Status: milestone 7 in progress (files, external selects, shortcuts, pins, bookmarks and scheduled messages done).** Accounts and multiple workspaces;
+**Status: milestone 7 in progress (files, external selects, shortcuts, pins, bookmarks, scheduled messages and user groups done).** Accounts and multiple workspaces;
 public and private channels, DMs and group DMs, threads, reactions, unread
 tracking and live updates in a responsive web UI. Apps are created from Slack
 app manifests and installed for bot tokens with enforced scopes. Events are
@@ -31,13 +31,15 @@ Web API methods:
 - `files.getUploadURLExternal|completeUploadExternal|info|list|delete` (what `files_upload_v2` / `files.uploadV2` use; the retired `files.upload` answers `method_deprecated`, as on Slack)
 - `reactions.add|get|remove`
 - `users.conversations|info|list|lookupByEmail|profile.get`
+- `usergroups.create|disable|enable|list|update`, `usergroups.users.list|update`
 - `views.open|push|update|publish`
 
 Events API: `message.channels|groups|im|mpim`, `app_mention`,
 `reaction_added|removed`, `member_joined_channel|member_left_channel`,
 `channel_*`/`group_*` lifecycle events, `im_created`, `team_join`,
 `user_change`, `app_home_opened`, `app_uninstalled`, `file_shared`,
-`file_deleted`, `pin_added` and `pin_removed`.
+`file_deleted`, `pin_added`, `pin_removed` and the `subteam_*` user group
+events.
 
 Interactivity: `block_actions` (messages, ephemeral messages, modals, App
 Home), `view_submission` (with `response_action` `errors`, `update`, `push`
@@ -68,7 +70,10 @@ details), and channels have a bookmarks bar.
 Messages can be scheduled, by bots or from the composer (🕒), and are
 posted when due, even across restarts.
 
-Next up in milestone 7: user groups and search; OAuth, OIDC sign-in and retention policies last (see
+User groups are managed from the account menu, suggested in the composer,
+and mentioning one (`<!subteam^S…|@handle>`) notifies its members.
+
+Next up in milestone 7: search; OAuth, OIDC sign-in and retention policies last (see
 [the roadmap](docs/DESIGN.md#milestones)).
 
 ## Run it

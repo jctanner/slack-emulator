@@ -4,7 +4,7 @@
 // realtime events.
 
 import { useSyncExternalStore } from 'react'
-import { slack, slackAll, type Conversation, type Counts, type Message, type Shortcut, type SlackUser, type SlashCommand, type View } from './api'
+import { slack, slackAll, type Conversation, type Counts, type Message, type Shortcut, type SlackUser, type SlashCommand, type Usergroup, type View } from './api'
 
 export type MessageList = { msgs: Message[]; hasMore: boolean; cursor?: string; loading: boolean }
 
@@ -31,6 +31,8 @@ export type WorkspaceState = {
   appsVersion: number
   /** Bumped per channel when its bookmarks change. */
   bookmarksVersion: Record<string, number>
+  /** User groups by ID (enabled and disabled). */
+  usergroups: Record<string, Usergroup>
   /** Bumped when this user schedules or cancels a message. */
   scheduledVersion: number
 }
@@ -58,6 +60,7 @@ export class WorkspaceStore {
       appsVersion: 0,
       bookmarksVersion: {},
       scheduledVersion: 0,
+      usergroups: {},
     }
   }
 
@@ -78,11 +81,12 @@ export class WorkspaceStore {
   /** Loads users, memberships and unread counts. Also used to resync after a reconnect. */
   async load() {
     const t = this.state.teamId
-    const [users, convs, counts, views] = await Promise.all([
+    const [users, convs, counts, views, groups] = await Promise.all([
       slackAll<SlackUser>(t, 'users.list', 'members'),
       slackAll<Conversation>(t, 'users.conversations', 'channels', { types: 'public_channel,private_channel,mpim,im' }),
       this.call<{ channels: Counts[]; mpims: Counts[]; ims: Counts[] }>('client.counts'),
       this.call<{ views: View[] }>('emu.views.current'),
+      this.call<{ usergroups: Usergroup[] }>('usergroups.list', { include_users: true, include_disabled: true }),
     ])
     this.set(() => ({
       ready: true,
@@ -93,6 +97,7 @@ export class WorkspaceStore {
       channels: {},
       threads: {},
       modals: views.views,
+      usergroups: Object.fromEntries(groups.usergroups.map((g) => [g.id, g])),
     }))
   }
 
@@ -400,6 +405,17 @@ export class WorkspaceStore {
           pinned_by: pinned ? ev.user : undefined,
         }))
       }
+      case 'subteam_created':
+      case 'subteam_updated':
+        this.set((st) => ({ usergroups: { ...st.usergroups, [ev.subteam.id]: { ...st.usergroups[ev.subteam.id], ...ev.subteam } } }))
+        return
+      case 'subteam_members_changed': {
+        const g = s.usergroups[ev.subteam_id]
+        if (!g) return
+        const users = [...(g.users ?? []).filter((u) => !ev.removed_users.includes(u)), ...ev.added_users.filter((u: string) => !(g.users ?? []).includes(u))]
+        this.set((st) => ({ usergroups: { ...st.usergroups, [g.id]: { ...g, users, user_count: users.length } } }))
+        return
+      }
       case 'emu_bookmarks_changed':
         this.set((st) => ({ bookmarksVersion: { ...st.bookmarksVersion, [ev.channel]: (st.bookmarksVersion[ev.channel] ?? 0) + 1 } }))
         return
@@ -470,8 +486,11 @@ export class WorkspaceStore {
     if (!counted) return
     const conv = this.state.convs[channel]
     const me = this.state.me
+    const inGroup = Object.values(this.state.usergroups).some(
+      (g) => !g.date_delete && g.users?.includes(me) && msg.text.includes(`<!subteam^${g.id}`),
+    )
     const mentioned =
-      conv?.is_im || msg.text.includes(`<@${me}>`) || /<!(here|channel|everyone)/.test(msg.text)
+      conv?.is_im || msg.text.includes(`<@${me}>`) || /<!(here|channel|everyone)/.test(msg.text) || inGroup
     this.set((st) => {
       const c = st.counts[channel] ?? { id: channel, last_read: '0', unread_count: 0, mention_count: 0 }
       return {

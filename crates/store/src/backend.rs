@@ -16,7 +16,7 @@ macro_rules! sql_store {
         use slack_emu_core::ids::{IdKind, TokenKind, new_id, new_internal_id};
         use slack_emu_core::models::{
             Account, ApiToken, App, Bookmark, Conversation, ConversationCounts, File, FileShare, Message, NewConversation,
-            NewUser, Pin, Reaction, ScheduledMessage, ThreadSummary, Topic, User, Workspace,
+            NewUser, Pin, Reaction, ScheduledMessage, Usergroup, ThreadSummary, Topic, User, Workspace,
         };
         use slack_emu_core::now;
         use sqlx::{Arguments, Row};
@@ -201,6 +201,23 @@ macro_rules! sql_store {
                 post_at: r.get("post_at"),
                 created: r.get("created"),
                 args: json_col(&r, "args").unwrap_or(Value::Null),
+            }
+        }
+
+        fn usergroup_row(r: $row) -> Usergroup {
+            Usergroup {
+                id: r.get("id"),
+                team_id: r.get("team_id"),
+                name: r.get("name"),
+                handle: r.get("handle"),
+                description: r.get("description"),
+                channels: split_list(&r.get::<String, _>("channels")),
+                created_by: r.get("created_by"),
+                updated_by: r.get("updated_by"),
+                created: r.get("created"),
+                updated: r.get("updated"),
+                disabled_at: r.get("disabled_at"),
+                deleted_by: r.get("deleted_by"),
             }
         }
 
@@ -644,6 +661,8 @@ macro_rules! sql_store {
                 for table in [
                     "sessions",
                     "identities",
+                    "usergroup_members",
+                    "usergroups",
                     "scheduled_messages",
                     "pins",
                     "bookmarks",
@@ -990,7 +1009,10 @@ macro_rules! sql_store {
                         (SELECT COUNT(*) FROM messages x WHERE {unread}) AS unread_count,
                         (SELECT COUNT(*) FROM messages x WHERE {unread}
                             AND (x.text LIKE '%<@' || m.user_id || '>%' OR x.text LIKE '%<!here%'
-                                 OR x.text LIKE '%<!channel%' OR x.text LIKE '%<!everyone%')) AS mention_count
+                                 OR x.text LIKE '%<!channel%' OR x.text LIKE '%<!everyone%'
+                            OR EXISTS (SELECT 1 FROM usergroup_members g JOIN usergroups ug ON ug.id = g.usergroup_id
+                                       WHERE g.user_id = m.user_id AND ug.disabled_at IS NULL
+                                         AND x.text LIKE '%<!subteam^' || g.usergroup_id || '%'))) AS mention_count
                      FROM conversation_members m JOIN conversations c ON c.id = m.conversation_id
                      WHERE m.user_id = ?
                      ORDER BY c.id"
@@ -1466,6 +1488,97 @@ macro_rules! sql_store {
                     .execute(&self.pool)
                     .await?;
                 Ok(r.rows_affected() > 0)
+            }
+
+            async fn create_usergroup(&self, g: &Usergroup) -> Result<()> {
+                sqlx::query(prep(
+                    "INSERT INTO usergroups (id, team_id, name, handle, description, channels, created_by, updated_by,
+                                             created, updated, disabled_at, deleted_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ))
+                .bind(&g.id)
+                .bind(&g.team_id)
+                .bind(&g.name)
+                .bind(&g.handle)
+                .bind(&g.description)
+                .bind(g.channels.join(","))
+                .bind(&g.created_by)
+                .bind(&g.updated_by)
+                .bind(g.created)
+                .bind(g.updated)
+                .bind(g.disabled_at)
+                .bind(&g.deleted_by)
+                .execute(&self.pool)
+                .await
+                .map_err(conflict("usergroup"))?;
+                Ok(())
+            }
+
+            async fn get_usergroup(&self, id: &str) -> Result<Option<Usergroup>> {
+                Ok(sqlx::query(prep("SELECT * FROM usergroups WHERE id = ?"))
+                    .bind(id)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .map(usergroup_row))
+            }
+
+            async fn list_usergroups(&self, team_id: &str) -> Result<Vec<Usergroup>> {
+                Ok(sqlx::query(prep("SELECT * FROM usergroups WHERE team_id = ? ORDER BY name, id"))
+                    .bind(team_id)
+                    .fetch_all(&self.pool)
+                    .await?
+                    .into_iter()
+                    .map(usergroup_row)
+                    .collect())
+            }
+
+            async fn update_usergroup(&self, g: &Usergroup) -> Result<()> {
+                sqlx::query(prep(
+                    "UPDATE usergroups SET name = ?, handle = ?, description = ?, channels = ?, updated_by = ?,
+                                           updated = ?, disabled_at = ?, deleted_by = ?
+                     WHERE id = ?",
+                ))
+                .bind(&g.name)
+                .bind(&g.handle)
+                .bind(&g.description)
+                .bind(g.channels.join(","))
+                .bind(&g.updated_by)
+                .bind(g.updated)
+                .bind(g.disabled_at)
+                .bind(&g.deleted_by)
+                .bind(&g.id)
+                .execute(&self.pool)
+                .await
+                .map_err(conflict("usergroup"))?;
+                Ok(())
+            }
+
+            async fn set_usergroup_members(&self, id: &str, users: &[String]) -> Result<()> {
+                let mut tx = self.pool.begin().await?;
+                sqlx::query(prep("DELETE FROM usergroup_members WHERE usergroup_id = ?"))
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                for u in users {
+                    sqlx::query(prep(
+                        "INSERT INTO usergroup_members (usergroup_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    ))
+                    .bind(id)
+                    .bind(u)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+                tx.commit().await?;
+                Ok(())
+            }
+
+            async fn usergroup_members(&self, id: &str) -> Result<Vec<String>> {
+                Ok(sqlx::query_scalar(prep(
+                    "SELECT user_id FROM usergroup_members WHERE usergroup_id = ? ORDER BY user_id",
+                ))
+                .bind(id)
+                .fetch_all(&self.pool)
+                .await?)
             }
 
             async fn add_reaction(&self, channel_id: &str, ts: &str, name: &str, user_id: &str) -> Result<bool> {

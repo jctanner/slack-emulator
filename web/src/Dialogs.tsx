@@ -18,6 +18,8 @@ export function Dialogs({ dialog, onClose }: { dialog: DialogKind; onClose: () =
       return <ChannelDetails channel={dialog.channel} initialTab={dialog.tab ?? 'about'} onClose={onClose} />
     case 'connection':
       return <ConnectionDetails onClose={onClose} />
+    case 'usergroups':
+      return <UserGroups onClose={onClose} />
   }
 }
 
@@ -514,5 +516,137 @@ function PinnedList({ channel, onJump }: { channel: string; onJump: (ts: string)
         </li>
       ))}
     </ul>
+  )
+}
+
+/** Create user groups, pick their members, and disable or re-enable them. */
+function UserGroups({ onClose }: { onClose: () => void }) {
+  const { store } = useWs()
+  const groups = useWorkspace(store, (s) => s.usergroups)
+  const users = useWorkspace(store, (s) => s.users)
+  const [selected, setSelected] = useState<string>()
+  const [members, setMembers] = useState<string[]>([])
+  const [name, setName] = useState('')
+  const [handle, setHandle] = useState('')
+  const [error, setError] = useState<string>()
+  const [note, setNote] = useState<string>()
+  const list = Object.values(groups).sort((a, b) => Number(!!a.date_delete) - Number(!!b.date_delete) || a.name.localeCompare(b.name))
+  const group = selected ? groups[selected] : undefined
+  const people = Object.values(users)
+    .filter((u) => !u.deleted && !u.is_bot)
+    .sort((a, b) => displayName(a).localeCompare(displayName(b)))
+
+  useEffect(() => setMembers(group?.users ?? []), [selected, group?.users?.join(',')])
+
+  const run = async (method: string, args: Record<string, unknown>, done?: string) => {
+    setError(undefined)
+    setNote(undefined)
+    try {
+      const r = await store.call<{ usergroup: { id: string } }>(method, args)
+      if (done) setNote(done)
+      return r
+    } catch (e) {
+      const code = (e as { code?: string }).code
+      const known: Record<string, string> = {
+        name_already_exists: 'A group already has that name.',
+        handle_already_exists: 'That handle is taken by a person or another group.',
+        invalid_handle: 'Handles use lowercase letters, numbers, dots, dashes and underscores (21 at most).',
+        no_users_provided: 'A group needs at least one member.',
+      }
+      setError((code && known[code]) || errorText(e))
+    }
+  }
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault()
+    const r = await run('usergroups.create', { name, handle: handle || undefined })
+    if (r) {
+      setName('')
+      setHandle('')
+      setSelected(r.usergroup.id)
+    }
+  }
+
+  return (
+    <Modal title="User groups" onClose={onClose} wide>
+      <p className="muted small">Mention a group with its handle, like @oncall, to notify everyone in it.</p>
+      <div className="usergroups">
+        <ul className="pick-list usergroup-list">
+          {list.map((g) => (
+            <li key={g.id}>
+              <button className={`pick-main ${g.id === selected ? 'active' : ''}`} onClick={() => setSelected(g.id)}>
+                <strong>{g.name}</strong>
+                <span className="muted small">
+                  @{g.handle} · {g.users?.length ?? 0} {g.users?.length === 1 ? 'person' : 'people'}
+                  {g.date_delete ? ' · disabled' : ''}
+                </span>
+              </button>
+            </li>
+          ))}
+          {!list.length && <li className="muted small">No groups yet.</li>}
+        </ul>
+        <div className="usergroup-detail">
+          {group ? (
+            <>
+              <h2>
+                {group.name} <span className="muted">@{group.handle}</span>
+              </h2>
+              <ul className="pick-list">
+                {people.map((u) => (
+                  <li key={u.id}>
+                    <label className="pick-main user-pick">
+                      <input
+                        type="checkbox"
+                        checked={members.includes(u.id)}
+                        onChange={(e) => setMembers((m) => (e.target.checked ? [...m, u.id] : m.filter((x) => x !== u.id)))}
+                      />
+                      <Avatar user={u} id={u.id} size={20} /> {displayName(u)}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="row-actions">
+                <button
+                  onClick={() =>
+                    run(
+                      group.date_delete ? 'usergroups.enable' : 'usergroups.disable',
+                      { usergroup: group.id },
+                      group.date_delete ? 'Enabled.' : 'Disabled: mentions of it no longer notify anyone.',
+                    )
+                  }
+                >
+                  {group.date_delete ? 'Enable' : 'Disable'}
+                </button>
+                <button className="primary-small" onClick={() => run('usergroups.users.update', { usergroup: group.id, users: members.join(',') }, 'Members saved.')}>
+                  Save members
+                </button>
+              </div>
+            </>
+          ) : (
+            <form onSubmit={create}>
+              <h2>New group</h2>
+              <label>
+                Name
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Platform oncall" required />
+              </label>
+              <label>
+                Handle <span className="muted small">(optional)</span>
+                <input value={handle} onChange={(e) => setHandle(e.target.value.toLowerCase())} placeholder="platform-oncall" />
+              </label>
+              <button type="submit" className="primary-small" disabled={!name.trim()}>
+                Create group
+              </button>
+            </form>
+          )}
+          {selected && (
+            <button className="link small" onClick={() => setSelected(undefined)}>
+              + New group
+            </button>
+          )}
+          {error && <p className="error">{error}</p>}
+          {note && <p className="ok small">{note}</p>}
+        </div>
+      </div>
+    </Modal>
   )
 }

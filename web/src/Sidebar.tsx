@@ -91,6 +91,9 @@ export function Sidebar({
                 <span className="muted">@{user.name}</span>
                 <span className="muted">{me.account.email}</span>
               </div>
+              <button role="menuitem" onClick={() => showDialog({ kind: 'usergroups' })}>
+                User groups
+              </button>
               <button role="menuitem" onClick={() => showDialog({ kind: 'connection' })}>
                 Connection details
               </button>

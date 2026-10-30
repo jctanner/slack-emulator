@@ -140,6 +140,16 @@ export type SlashCommand = {
   app_name: string
 }
 
+export type Usergroup = {
+  id: string
+  name: string
+  handle: string
+  description: string
+  date_delete: number
+  users?: string[]
+  user_count?: number
+}
+
 export type Shortcut = {
   app_id: string
   app_name: string

@@ -3,7 +3,7 @@
 //! gets a fresh database there).
 
 use slack_emu_core::models::{
-    Bookmark, Conversation, File, FileShare, Message, NewConversation, NewUser, Pin, ScheduledMessage,
+    Bookmark, Conversation, File, FileShare, Message, NewConversation, NewUser, Pin, ScheduledMessage, Usergroup,
 };
 use slack_emu_core::now;
 
@@ -398,6 +398,68 @@ pub(crate) async fn scheduled_messages(s: &dyn Store) {
     assert_eq!(ids(s.due_scheduled(1000).await.unwrap()), ["Q2"]);
 }
 
+pub(crate) async fn usergroups(s: &dyn Store) {
+    let ws = s.create_workspace("Acme", "acme").await.unwrap();
+    let a = s.create_user(new_user(&ws.id, "a")).await.unwrap();
+    let b = s.create_user(new_user(&ws.id, "b")).await.unwrap();
+    let mut g = Usergroup {
+        id: "S1".into(),
+        team_id: ws.id.clone(),
+        name: "Oncall".into(),
+        handle: "oncall".into(),
+        description: String::new(),
+        channels: Vec::new(),
+        created_by: a.id.clone(),
+        updated_by: a.id.clone(),
+        created: 1,
+        updated: 1,
+        disabled_at: None,
+        deleted_by: None,
+    };
+    s.create_usergroup(&g).await.unwrap();
+    let mut dup = g.clone();
+    dup.id = "S2".into();
+    dup.name = "Other".into();
+    assert!(
+        matches!(s.create_usergroup(&dup).await, Err(StoreError::Conflict(_))),
+        "handles are unique"
+    );
+    g.description = "Pager rotation".into();
+    g.channels = vec!["C1".into(), "C2".into()];
+    g.disabled_at = Some(5);
+    s.update_usergroup(&g).await.unwrap();
+    assert_eq!(s.get_usergroup("S1").await.unwrap().unwrap(), g);
+    assert_eq!(s.list_usergroups(&ws.id).await.unwrap(), vec![g.clone()]);
+    s.set_usergroup_members("S1", &[b.id.clone(), a.id.clone()])
+        .await
+        .unwrap();
+    let mut both = vec![a.id.clone(), b.id.clone()];
+    both.sort();
+    assert_eq!(s.usergroup_members("S1").await.unwrap(), both);
+    s.set_usergroup_members("S1", std::slice::from_ref(&b.id))
+        .await
+        .unwrap();
+    assert_eq!(s.usergroup_members("S1").await.unwrap(), std::slice::from_ref(&b.id));
+
+    // A message mentioning an enabled group counts as a mention for its members.
+    g.disabled_at = None;
+    s.update_usergroup(&g).await.unwrap();
+    let c = s
+        .create_conversation(channel(&ws.id, "chat", false), &[a.id.clone(), b.id.clone()])
+        .await
+        .unwrap();
+    s.insert_message(&msg(
+        &c.id,
+        "1000000001.000000",
+        &a.id,
+        "<!subteam^S1|@oncall> help",
+        None,
+    ))
+    .await
+    .unwrap();
+    assert_eq!(s.counts_for_user(&b.id).await.unwrap()[0].mention_count, 1);
+}
+
 /// Declares one `#[tokio::test]` per conformance check, each with a store
 /// from `$make` (an `Option`: `None` skips, e.g. when no Postgres is configured).
 macro_rules! suite {
@@ -426,6 +488,11 @@ macro_rules! suite {
         async fn scheduled_messages() {
             let Some(s) = $make else { return };
             $crate::conformance::scheduled_messages(&s).await;
+        }
+        #[tokio::test]
+        async fn usergroups() {
+            let Some(s) = $make else { return };
+            $crate::conformance::usergroups(&s).await;
         }
         #[tokio::test]
         async fn sessions_expire() {

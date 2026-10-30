@@ -1670,6 +1670,31 @@ button.primary-small {
 
 /* ---------- mobile: one pane at a time ---------- */
 
+/* ---------- user groups ---------- */
+
+.usergroups {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.card label.pick-main.user-pick {
+  display: flex;
+  margin: 0;
+}
+
+.usergroup-list .pick-main.active {
+  color: var(--accent);
+}
+
+.usergroup-detail h2 {
+  margin-top: 0;
+}
+
+.group-icon {
+  font-size: 14px;
+}
+
 /* ---------- scheduled messages ---------- */
 
 .schedule-menu {
@@ -2752,6 +2777,7 @@ textarea.bk-field {
     border-radius: 14px 14px 0 0;
   }
 
+  .usergroups,
   .kv {
     grid-template-columns: 1fr;
     gap: 2px;

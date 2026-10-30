@@ -6,7 +6,7 @@ use slack_emu_core::ids::TokenKind;
 
 use super::{
     ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, pins, reactions, scheduled,
-    users, views,
+    usergroups, users, views,
 };
 use crate::AppState;
 
@@ -132,6 +132,13 @@ const METHODS: &[MethodSpec] = &[
     m("reactions.get", &["reactions:read"]),
     m("reactions.remove", &["reactions:write"]),
     m("team.info", &["team:read"]),
+    m("usergroups.create", &["usergroups:write"]),
+    m("usergroups.disable", &["usergroups:write"]),
+    m("usergroups.enable", &["usergroups:write"]),
+    m("usergroups.list", &["usergroups:read"]),
+    m("usergroups.update", &["usergroups:write"]),
+    m("usergroups.users.list", &["usergroups:read"]),
+    m("usergroups.users.update", &["usergroups:write"]),
     m("users.conversations", &[]),
     m("users.info", &["users:read"]),
     m("users.list", &["users:read"]),
@@ -240,6 +247,13 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
         "reactions.get" => reactions::get(s, c, a).await,
         "reactions.remove" => reactions::remove(s, c, a).await,
         "team.info" => users::team_info(s, c, a).await,
+        "usergroups.create" => usergroups::create(s, c, a).await,
+        "usergroups.disable" => usergroups::disable(s, c, a).await,
+        "usergroups.enable" => usergroups::enable(s, c, a).await,
+        "usergroups.list" => usergroups::list(s, c, a).await,
+        "usergroups.update" => usergroups::update(s, c, a).await,
+        "usergroups.users.list" => usergroups::users_list(s, c, a).await,
+        "usergroups.users.update" => usergroups::users_update(s, c, a).await,
         "users.conversations" => users::conversations(s, c, a).await,
         "users.info" => users::info(s, c, a).await,
         "users.list" => users::list(s, c, a).await,

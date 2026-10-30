@@ -2,7 +2,7 @@
 // (plain typing with @handles and #channels → Slack's wire format).
 
 import { Fragment, type ReactNode } from 'react'
-import type { Conversation, SlackUser } from './api'
+import type { Conversation, SlackUser, Usergroup } from './api'
 import { emojiChar } from './emoji'
 
 export type MrkdwnContext = {
@@ -201,9 +201,15 @@ export function plainText(text: string, ctx: Pick<MrkdwnContext, 'users' | 'conv
   )
 }
 
-/** Composer text → Slack wire format: escapes `&<>` and links @handles / #channels. */
-export function encodeOutgoing(text: string, users: Record<string, SlackUser>, convs: Record<string, Conversation>): string {
+/** Composer text → Slack wire format: escapes `&<>` and links @handles (people and groups) / #channels. */
+export function encodeOutgoing(
+  text: string,
+  users: Record<string, SlackUser>,
+  convs: Record<string, Conversation>,
+  groups: Record<string, Usergroup> = {},
+): string {
   const byHandle = new Map(Object.values(users).map((u) => [u.name.toLowerCase(), u.id]))
+  const groupByHandle = new Map(Object.values(groups).filter((g) => !g.date_delete).map((g) => [g.handle, g.id]))
   const byChannel = new Map(
     Object.values(convs)
       .filter((c) => c.name && !c.is_im && !c.is_mpim)
@@ -215,7 +221,9 @@ export function encodeOutgoing(text: string, users: Record<string, SlackUser>, c
       const tail = handle.slice(h.length)
       if (['here', 'channel', 'everyone'].includes(h)) return `${pre}<!${h}>${tail}`
       const id = byHandle.get(h.toLowerCase())
-      return id ? `${pre}<@${id}>${tail}` : all
+      if (id) return `${pre}<@${id}>${tail}`
+      const group = groupByHandle.get(h.toLowerCase())
+      return group ? `${pre}<!subteam^${group}|@${h.toLowerCase()}>${tail}` : all
     })
     .replace(/(^|[\s(])#([\p{L}\p{N}_-]+)/gu, (all, pre: string, name: string) => {
       const id = byChannel.get(name)
@@ -230,7 +238,8 @@ export function decodeForEdit(text: string, users: Record<string, SlackUser>, co
       const [t, label] = splitOnce(body, '|')
       if (t.startsWith('@')) return '@' + (users[t.slice(1)]?.name ?? label ?? t.slice(1))
       if (t.startsWith('#')) return '#' + (convs[t.slice(1)]?.name ?? label ?? t.slice(1))
-      if (t.startsWith('!')) return '@' + t.slice(1).split('^')[0]
+      // `<!subteam^S123|@handle>` → `@handle`; `<!here>` → `@here`.
+      if (t.startsWith('!')) return label ?? '@' + t.slice(1).split('^')[0]
       if (label) return all
       return t
     }),

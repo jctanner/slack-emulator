@@ -197,6 +197,11 @@ pub fn event_scopes(event: &str) -> Option<&'static [&'static str]> {
         "im_created" => &["im:read"],
         "file_shared" | "file_created" | "file_deleted" | "file_change" => &["files:read"],
         "pin_added" | "pin_removed" => &["pins:read"],
+        "subteam_created"
+        | "subteam_updated"
+        | "subteam_members_changed"
+        | "subteam_self_added"
+        | "subteam_self_removed" => &["usergroups:read"],
         "team_join" | "user_change" => &["users:read"],
         "app_home_opened" | "app_uninstalled" | "tokens_revoked" | "app_rate_limited" => return None,
         _ => return Some(&[]),

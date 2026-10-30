@@ -18,6 +18,7 @@ export type DialogKind =
   | { kind: 'new-message' }
   | { kind: 'channel-details'; channel: string; tab?: 'about' | 'members' | 'pinned' | 'settings' }
   | { kind: 'connection' }
+  | { kind: 'usergroups' }
 
 export const WorkspaceContext = createContext<WorkspaceCtx | null>(null)
 

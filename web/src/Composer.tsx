@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import type { Conversation, SlackUser, SlashCommand } from './api'
+import type { Conversation, SlackUser, SlashCommand, Usergroup } from './api'
 import { useWs } from './context'
 import { searchEmoji } from './emoji'
 import { displayName, encodeOutgoing } from './mrkdwn'
@@ -40,6 +40,7 @@ function suggestions(
   users: Record<string, SlackUser>,
   convs: Record<string, Conversation>,
   commands: SlashCommand[],
+  groups: Record<string, Usergroup>,
 ): Suggestion[] {
   const q = trigger.query
   if (trigger.char === '/') {
@@ -76,10 +77,26 @@ function suggestions(
         ),
         detail: `@${u.name}`,
       }))
+    const teams = Object.values(groups)
+      .filter((g) => !g.date_delete && (g.handle.includes(q) || g.name.toLowerCase().includes(q)))
+      .slice(0, 4)
+      .map((g) => ({
+        key: g.id,
+        insert: `@${g.handle} `,
+        label: (
+          <>
+            <span className="group-icon" aria-hidden>
+              👥︎
+            </span>{' '}
+            <strong>{g.name}</strong>
+          </>
+        ),
+        detail: `@${g.handle} · ${g.users?.length ?? g.user_count ?? 0} people`,
+      }))
     const special = ['here', 'channel', 'everyone']
       .filter((s) => s.startsWith(q))
       .map((s) => ({ key: s, insert: `@${s} `, label: <strong>@{s}</strong>, detail: s === 'here' ? 'Notify active members' : 'Notify everyone in this channel' }))
-    return [...people, ...special].slice(0, 8)
+    return [...people, ...teams, ...special].slice(0, 8)
   }
   if (trigger.char === '#') {
     return Object.values(convs)
@@ -115,6 +132,7 @@ export function Composer({
   const { store, sendTyping, typingDone } = useWs()
   const users = useWorkspace(store, (s) => s.users)
   const convs = useWorkspace(store, (s) => s.convs)
+  const groups = useWorkspace(store, (s) => s.usergroups)
   const draftKey = thread ? `${channel}/${thread}` : channel
   const [text, setText] = useState(() => drafts.get(draftKey) ?? '')
   const [caret, setCaret] = useState(0)
@@ -157,8 +175,8 @@ export function Composer({
 
   const trigger = triggerAt(text, caret)
   const items = useMemo(
-    () => (trigger && trigger.start !== dismissed ? suggestions(trigger, users, convs, commands) : []),
-    [trigger?.char, trigger?.query, trigger?.start, dismissed, users, convs, commands],
+    () => (trigger && trigger.start !== dismissed ? suggestions(trigger, users, convs, commands, groups) : []),
+    [trigger?.char, trigger?.query, trigger?.start, dismissed, users, convs, commands, groups],
   )
 
   const pick = (s: Suggestion) => {
@@ -188,7 +206,7 @@ export function Composer({
     const cmd = parseCommand(text.trimEnd())
     if (cmd) {
       if (cmd.command === '/me') {
-        store.call('chat.meMessage', { channel, text: encodeOutgoing(cmd.text, users, convs) }).catch(() => {})
+        store.call('chat.meMessage', { channel, text: encodeOutgoing(cmd.text, users, convs, groups) }).catch(() => {})
       } else {
         // The server answers unknown commands and app failures with a Slackbot message.
         store.call('chat.command', { channel, command: cmd.command, text: cmd.text }).catch(() => {})
@@ -197,7 +215,7 @@ export function Composer({
       typingDone(channel, thread)
       return
     }
-    store.send(channel, encodeOutgoing(trimmed, users, convs), {
+    store.send(channel, encodeOutgoing(trimmed, users, convs, groups), {
       thread_ts: thread,
       reply_broadcast: thread && broadcast ? true : undefined,
     })
@@ -210,7 +228,7 @@ export function Composer({
     setUploading(true)
     setUploadError(undefined)
     try {
-      await store.sendFiles(channel, encodeOutgoing(trimmed, users, convs), attachments, { thread_ts: thread })
+      await store.sendFiles(channel, encodeOutgoing(trimmed, users, convs, groups), attachments, { thread_ts: thread })
       setAttachments([])
       setText('')
       typingDone(channel, thread)
@@ -248,7 +266,7 @@ export function Composer({
   const schedule = async (post_at: number) => {
     await store.call('chat.scheduleMessage', {
       channel,
-      text: encodeOutgoing(text.trim(), users, convs),
+      text: encodeOutgoing(text.trim(), users, convs, groups),
       post_at,
       thread_ts: thread,
     })

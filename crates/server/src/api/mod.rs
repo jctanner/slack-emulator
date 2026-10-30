@@ -17,6 +17,7 @@ mod pins;
 mod reactions;
 mod scheduled;
 pub mod shapes;
+mod usergroups;
 mod users;
 mod views;
 

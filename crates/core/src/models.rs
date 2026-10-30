@@ -316,3 +316,22 @@ pub struct ScheduledMessage {
     /// `chat.postMessage` arguments.
     pub args: serde_json::Value,
 }
+
+/// A user group (`S…`), mentioned as `<!subteam^S…|@handle>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Usergroup {
+    pub id: String,
+    pub team_id: String,
+    pub name: String,
+    pub handle: String,
+    pub description: String,
+    /// Default channels.
+    pub channels: Vec<String>,
+    pub created_by: String,
+    pub updated_by: String,
+    pub created: i64,
+    pub updated: i64,
+    /// Set while disabled.
+    pub disabled_at: Option<i64>,
+    pub deleted_by: Option<String>,
+}
