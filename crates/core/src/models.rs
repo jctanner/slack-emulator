@@ -277,3 +277,26 @@ pub struct FileShare {
     pub channel_id: String,
     pub ts: String,
 }
+
+/// A pinned message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pin {
+    pub channel_id: String,
+    pub ts: String,
+    pub pinned_by: String,
+    pub created: i64,
+}
+
+/// A channel bookmark (a link shown under the channel header).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bookmark {
+    pub id: String,
+    pub channel_id: String,
+    pub title: String,
+    pub link: String,
+    pub emoji: Option<String>,
+    pub app_id: Option<String>,
+    pub created: i64,
+    pub updated: i64,
+    pub updated_by: String,
+}

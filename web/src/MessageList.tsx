@@ -19,6 +19,7 @@ const SYSTEM = new Set([
   'channel_name',
   'channel_archive',
   'channel_unarchive',
+  'pinned_item',
 ])
 
 const GROUP_WINDOW_SECS = 5 * 60
@@ -245,6 +246,7 @@ function MessageRow({
     msg.pending ? 'pending' : '',
     msg.failed ? 'failed' : '',
     highlighted ? 'highlighted' : '',
+    msg.pinned_to?.length ? 'pinned' : '',
     selected ? 'selected' : '',
     ephemeral ? 'ephemeral' : '',
   ].join(' ')
@@ -259,6 +261,11 @@ function MessageRow({
         )}
       </div>
       <div className="message-content">
+        {!!msg.pinned_to?.length && (
+          <div className="pinned-note">
+            📌︎ Pinned{msg.pinned_by ? ` by ${displayName(users[msg.pinned_by], msg.pinned_by)}` : ''}
+          </div>
+        )}
         {ephemeral && (
           <div className="ephemeral-note">
             <span aria-hidden>👁︎</span> Only visible to you ·{' '}
@@ -388,6 +395,19 @@ function MessageRow({
           <button title="Copy link" onClick={copyLink}>
             🔗︎
           </button>
+          {!msg.subtype || ['thread_broadcast', 'me_message', 'bot_message', 'file_share'].includes(msg.subtype) ? (
+            <button
+              title={msg.pinned_to?.length ? 'Unpin from channel' : 'Pin to channel'}
+              className={msg.pinned_to?.length ? 'on' : ''}
+              onClick={() =>
+                ws.store
+                  .call(msg.pinned_to?.length ? 'pins.remove' : 'pins.add', { channel, timestamp: msg.ts })
+                  .catch((e) => alert(`Couldn’t change the pin: ${e.code ?? e}`))
+              }
+            >
+              📌︎
+            </button>
+          ) : null}
           <ShortcutMenu type="message" channel={channel} messageTs={msg.ts} label="More actions" />
           {canEdit && (
             <button title="Edit message" onClick={() => onEdit(true)}>

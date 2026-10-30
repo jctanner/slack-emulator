@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { describeError, slackAll, type Conversation, type SlackUser } from './api'
+import { describeError, slackAll, type Conversation, type Message, type SlackUser } from './api'
 import { useWs, type DialogKind } from './context'
-import { displayName } from './mrkdwn'
+import { Mrkdwn, displayName } from './mrkdwn'
+import { clientPath, navigate } from './router'
 import { convName, useWorkspace } from './store'
 import { Avatar } from './Avatar'
 
@@ -272,7 +273,7 @@ function ChannelDetails({
   onClose,
 }: {
   channel: string
-  initialTab: 'about' | 'members' | 'settings'
+  initialTab: 'about' | 'members' | 'pinned' | 'settings'
   onClose: () => void
 }) {
   const { store, open } = useWs()
@@ -311,7 +312,7 @@ function ChannelDetails({
   return (
     <Modal title={title} onClose={onClose} wide>
       <div className="tabs" role="tablist">
-        {(['about', 'members', ...(isDm ? [] : ['settings'])] as const).map((t) => (
+        {(['about', 'members', 'pinned', ...(isDm ? [] : ['settings'])] as const).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => setTab(t as typeof tab)}>
             {t[0].toUpperCase() + t.slice(1)}
           </button>
@@ -342,6 +343,16 @@ function ChannelDetails({
             {' · '}ID <code>{conv.id}</code>
           </p>
         </div>
+      )}
+
+      {tab === 'pinned' && (
+        <PinnedList
+          channel={channel}
+          onJump={(ts) => {
+            onClose()
+            navigate(`${clientPath(store.state.teamId, channel)}?ts=${ts}`)
+          }}
+        />
       )}
 
       {tab === 'members' && (
@@ -470,5 +481,38 @@ function ConnectionDetails({ onClose }: { onClose: () => void }) {
         apps and tokens arrives in the next milestone.
       </p>
     </Modal>
+  )
+}
+
+/** A conversation's pinned messages, newest pin first. */
+function PinnedList({ channel, onJump }: { channel: string; onJump: (ts: string) => void }) {
+  const { store, open } = useWs()
+  const users = useWorkspace(store, (s) => s.users)
+  const convs = useWorkspace(store, (s) => s.convs)
+  const [items, setItems] = useState<{ message: Message; created_by: string }[]>()
+  const [error, setError] = useState<string>()
+  useEffect(() => {
+    store
+      .call<{ items: { message: Message; created_by: string }[] }>('pins.list', { channel })
+      .then((r) => setItems(r.items), (e) => setError(errorText(e)))
+  }, [channel, store])
+  if (error) return <p className="error">{error}</p>
+  if (!items) return <p className="muted">Loading…</p>
+  if (!items.length) return <p className="muted">Nothing is pinned yet. Pin a message from its actions menu (📌).</p>
+  const ctx = { me: store.state.me, users, convs, onChannel: (id: string) => open(id) }
+  return (
+    <ul className="pinned-list">
+      {items.map(({ message: m, created_by }) => (
+        <li key={m.ts}>
+          <button className="pinned-item" onClick={() => onJump(m.ts)}>
+            <span className="pinned-head">
+              <strong>{displayName(users[m.user ?? ''], m.username ?? 'unknown')}</strong>
+              <span className="muted small"> · pinned by {displayName(users[created_by], created_by)}</span>
+            </span>
+            <Mrkdwn text={m.text || '(no text)'} ctx={ctx} />
+          </button>
+        </li>
+      ))}
+    </ul>
   )
 }

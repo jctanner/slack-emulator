@@ -5,7 +5,7 @@ use slack_emu_core::SlackError;
 use slack_emu_core::ids::TokenKind;
 
 use super::{
-    ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, reactions, users, views,
+    ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, pins, reactions, users, views,
 };
 use crate::AppState;
 
@@ -64,6 +64,10 @@ const METHODS: &[MethodSpec] = &[
     session("apps.manifest.validate"),
     m("auth.revoke", &[]),
     m("auth.test", &[]),
+    m("bookmarks.add", &["bookmarks:write"]),
+    m("bookmarks.edit", &["bookmarks:write"]),
+    m("bookmarks.list", &["bookmarks:read"]),
+    m("bookmarks.remove", &["bookmarks:write"]),
     m("bots.info", &["users:read"]),
     session("chat.command"),
     m("chat.delete", &["chat:write"]),
@@ -117,6 +121,9 @@ const METHODS: &[MethodSpec] = &[
     m("files.info", &["files:read"]),
     m("files.list", &["files:read"]),
     m("files.upload", &[]),
+    m("pins.add", &["pins:write"]),
+    m("pins.list", &["pins:read"]),
+    m("pins.remove", &["pins:write"]),
     m("reactions.add", &["reactions:write"]),
     m("reactions.get", &["reactions:read"]),
     m("reactions.remove", &["reactions:write"]),
@@ -162,6 +169,10 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
         "apps.manifest.validate" => apps::manifest_validate(s, c, a).await,
         "auth.revoke" => apps::auth_revoke(s, c, a).await,
         "auth.test" => auth_test(s, c),
+        "bookmarks.add" => pins::bookmark_add(s, c, a).await,
+        "bookmarks.edit" => pins::bookmark_edit(s, c, a).await,
+        "bookmarks.list" => pins::bookmark_list(s, c, a).await,
+        "bookmarks.remove" => pins::bookmark_remove(s, c, a).await,
         "bots.info" => apps::bots_info(s, c, a).await,
         "chat.command" => interactive::command(s, c, a).await,
         "chat.delete" => chat::delete(s, c, a).await,
@@ -215,6 +226,9 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
         "files.info" => files::info(s, c, a).await,
         "files.list" => files::list(s, c, a).await,
         "files.upload" => files::upload_v1(s, c, a).await,
+        "pins.add" => pins::add(s, c, a).await,
+        "pins.list" => pins::list(s, c, a).await,
+        "pins.remove" => pins::remove(s, c, a).await,
         "reactions.add" => reactions::add(s, c, a).await,
         "reactions.get" => reactions::get(s, c, a).await,
         "reactions.remove" => reactions::remove(s, c, a).await,

@@ -62,6 +62,10 @@ export type Message = {
   parent_user_id?: string
   hidden?: boolean
   files?: SlackFile[]
+  /** Conversations the message is pinned in. */
+  pinned_to?: string[]
+  /** Client-side: who pinned it (known from live pin events). */
+  pinned_by?: string
   /** Shown only to this user, until reload (`chat.postEphemeral`, slash command replies). */
   is_ephemeral?: boolean
   /** Client-side: sent but not yet confirmed, or failed to send. */

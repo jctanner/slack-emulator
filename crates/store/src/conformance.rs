@@ -2,7 +2,7 @@
 //! suite; Postgres only when `EMU_TEST_POSTGRES` names a server (each test
 //! gets a fresh database there).
 
-use slack_emu_core::models::{Conversation, File, FileShare, Message, NewConversation, NewUser};
+use slack_emu_core::models::{Bookmark, Conversation, File, FileShare, Message, NewConversation, NewUser, Pin};
 use slack_emu_core::now;
 
 use crate::{ConversationQuery, Store, StoreError, TsRange};
@@ -314,6 +314,59 @@ pub(crate) async fn files(s: &dyn Store) {
     assert_eq!(s.get_message(&c.id, &m.ts).await.unwrap().unwrap().file_ids, ["F1"]);
 }
 
+pub(crate) async fn pins_and_bookmarks(s: &dyn Store) {
+    let ws = s.create_workspace("Acme", "acme").await.unwrap();
+    let a = s.create_user(new_user(&ws.id, "a")).await.unwrap();
+    let c = s
+        .create_conversation(channel(&ws.id, "chat", false), std::slice::from_ref(&a.id))
+        .await
+        .unwrap();
+    for ts in ["1000000001.000000", "1000000002.000000"] {
+        s.insert_message(&msg(&c.id, ts, &a.id, "x", None)).await.unwrap();
+    }
+    let pin = |ts: &str| Pin {
+        channel_id: c.id.clone(),
+        ts: ts.into(),
+        pinned_by: a.id.clone(),
+        created: now(),
+    };
+    assert!(s.add_pin(&pin("1000000002.000000")).await.unwrap());
+    assert!(!s.add_pin(&pin("1000000002.000000")).await.unwrap());
+    assert!(s.add_pin(&pin("1000000001.000000")).await.unwrap());
+    assert_eq!(s.pins(&c.id).await.unwrap().len(), 2);
+    assert_eq!(
+        s.pinned(&c.id, &["1000000001.000000".into(), "1000000009.000000".into()])
+            .await
+            .unwrap(),
+        ["1000000001.000000"]
+    );
+    assert!(s.remove_pin(&c.id, "1000000001.000000").await.unwrap());
+    assert!(!s.remove_pin(&c.id, "1000000001.000000").await.unwrap());
+    // Deleting a message unpins it.
+    s.delete_message(&c.id, "1000000002.000000").await.unwrap();
+    assert!(s.pins(&c.id).await.unwrap().is_empty());
+
+    let mut b = Bookmark {
+        id: "Bk1".into(),
+        channel_id: c.id.clone(),
+        title: "Runbook".into(),
+        link: "https://example.com/runbook".into(),
+        emoji: Some(":book:".into()),
+        app_id: None,
+        created: now(),
+        updated: now(),
+        updated_by: a.id.clone(),
+    };
+    s.add_bookmark(&b).await.unwrap();
+    b.title = "Runbook v2".into();
+    b.emoji = None;
+    s.update_bookmark(&b).await.unwrap();
+    assert_eq!(s.get_bookmark("Bk1").await.unwrap().unwrap(), b);
+    assert_eq!(s.bookmarks(&c.id).await.unwrap(), vec![b]);
+    s.remove_bookmark("Bk1").await.unwrap();
+    assert!(s.bookmarks(&c.id).await.unwrap().is_empty());
+}
+
 /// Declares one `#[tokio::test]` per conformance check, each with a store
 /// from `$make` (an `Option`: `None` skips, e.g. when no Postgres is configured).
 macro_rules! suite {
@@ -332,6 +385,11 @@ macro_rules! suite {
         async fn files() {
             let Some(s) = $make else { return };
             $crate::conformance::files(&s).await;
+        }
+        #[tokio::test]
+        async fn pins_and_bookmarks() {
+            let Some(s) = $make else { return };
+            $crate::conformance::pins_and_bookmarks(&s).await;
         }
         #[tokio::test]
         async fn sessions_expire() {

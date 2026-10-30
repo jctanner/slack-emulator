@@ -6,7 +6,7 @@ use it through a Slack-like web UI in any desktop or mobile browser.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the architecture and roadmap.
 
-**Status: milestone 7 in progress (files, external selects and shortcuts done).** Accounts and multiple workspaces;
+**Status: milestone 7 in progress (files, external selects, shortcuts, pins and bookmarks done).** Accounts and multiple workspaces;
 public and private channels, DMs and group DMs, threads, reactions, unread
 tracking and live updates in a responsive web UI. Apps are created from Slack
 app manifests and installed for bot tokens with enforced scopes. Events are
@@ -23,6 +23,7 @@ live Inspector in the UI.
 Web API methods:
 
 - `api.test`, `auth.test`, `auth.revoke`, `team.info`, `bots.info`
+- `bookmarks.add|edit|list|remove`, `pins.add|list|remove`
 - `apps.connections.open`, `apps.manifest.create|update|delete|export|validate`
 - `chat.postMessage`, `chat.postEphemeral`, `chat.update`, `chat.delete`, `chat.meMessage`, `chat.getPermalink`
 - `conversations.archive|close|create|history|info|invite|join|kick|leave|list|mark|members|open|rename|replies|setPurpose|setTopic|unarchive`
@@ -34,8 +35,8 @@ Web API methods:
 Events API: `message.channels|groups|im|mpim`, `app_mention`,
 `reaction_added|removed`, `member_joined_channel|member_left_channel`,
 `channel_*`/`group_*` lifecycle events, `im_created`, `team_join`,
-`user_change`, `app_home_opened`, `app_uninstalled`, `file_shared` and
-`file_deleted`.
+`user_change`, `app_home_opened`, `app_uninstalled`, `file_shared`,
+`file_deleted`, `pin_added` and `pin_removed`.
 
 Interactivity: `block_actions` (messages, ephemeral messages, modals, App
 Home), `view_submission` (with `response_action` `errors`, `update`, `push`
@@ -60,8 +61,10 @@ cards. `url_private` downloads need a token with `files:read` or a signed-in
 session, as on Slack (the emulator answers 401 rather than Slack's login
 page).
 
-Next up in milestone 7: pins, bookmarks, scheduled messages, user groups and
-search; OAuth, OIDC sign-in and retention policies last (see
+Messages can be pinned (📌 in a message's actions; "Pinned" in channel
+details), and channels have a bookmarks bar.
+
+Next up in milestone 7: scheduled messages, user groups and search; OAuth, OIDC sign-in and retention policies last (see
 [the roadmap](docs/DESIGN.md#milestones)).
 
 ## Run it

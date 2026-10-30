@@ -29,6 +29,8 @@ export type WorkspaceState = {
   homeViews: Record<string, View>
   /** Bumped when apps change (installs, manifest edits), so command and shortcut lists refresh. */
   appsVersion: number
+  /** Bumped per channel when its bookmarks change. */
+  bookmarksVersion: Record<string, number>
 }
 
 type Listener = () => void
@@ -52,6 +54,7 @@ export class WorkspaceStore {
       modals: [],
       homeViews: {},
       appsVersion: 0,
+      bookmarksVersion: {},
     }
   }
 
@@ -381,6 +384,18 @@ export class WorkspaceStore {
       }
       case 'emu_ephemeral_deleted':
         return this.dismissEphemeral(ev.channel, ev.ts)
+      case 'pin_added':
+      case 'pin_removed': {
+        const pinned = ev.type === 'pin_added'
+        return this.mapMessage(ev.channel_id, ev.item.message.ts, (m) => ({
+          ...m,
+          pinned_to: pinned ? [ev.channel_id] : undefined,
+          pinned_by: pinned ? ev.user : undefined,
+        }))
+      }
+      case 'emu_bookmarks_changed':
+        this.set((st) => ({ bookmarksVersion: { ...st.bookmarksVersion, [ev.channel]: (st.bookmarksVersion[ev.channel] ?? 0) + 1 } }))
+        return
       case 'file_deleted':
         // Messages keep showing that a file was there.
         this.set((st) => {

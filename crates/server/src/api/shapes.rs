@@ -203,6 +203,8 @@ pub async fn messages(state: &AppState, channel_id: &str, msgs: &[Message]) -> A
         }
     }
 
+    let pinned = state.store.pinned(channel_id, &all_ts).await?;
+
     // Files, by ID; a message naming a deleted one shows a tombstone.
     let files = super::files::files_for_messages(state, msgs).await?;
 
@@ -230,6 +232,9 @@ pub async fn messages(state: &AppState, channel_id: &str, msgs: &[Message]) -> A
             }
             if let Some(Some(profile)) = m.bot_id.as_ref().and_then(|b| bots.get(b)) {
                 v["bot_profile"] = profile.clone();
+            }
+            if pinned.contains(&m.ts) {
+                v["pinned_to"] = json!([channel_id]);
             }
             if !m.file_ids.is_empty() {
                 v["files"] = m

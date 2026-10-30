@@ -1670,6 +1670,117 @@ button.primary-small {
 
 /* ---------- mobile: one pane at a time ---------- */
 
+/* ---------- pins and bookmarks ---------- */
+
+.pinned-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.message.pinned {
+  background: color-mix(in srgb, #e8a33d 9%, transparent);
+}
+
+.message-actions button.on {
+  background: var(--reaction-mine-bg);
+}
+
+.pinned-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 60dvh;
+  overflow-y: auto;
+}
+
+.pinned-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.pinned-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 10px 4px;
+}
+
+.pinned-item:hover {
+  background: var(--hover);
+}
+
+.bookmarks-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 6px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.bookmark {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.bookmark:hover {
+  background: var(--hover);
+}
+
+.bookmark a {
+  color: inherit;
+  text-decoration: none;
+  padding: 3px 6px;
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-remove {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  padding: 0 6px 0 0;
+  visibility: hidden;
+}
+
+.bookmark:hover .bookmark-remove,
+.bookmark-remove:focus-visible {
+  visibility: visible;
+}
+
+.bookmark-add,
+.bookmark-cancel {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  padding: 3px 6px;
+  font-size: 13px;
+}
+
+.bookmark-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.bookmark-form input {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
 /* ---------- files ---------- */
 
 .msg-files {
@@ -2589,8 +2700,10 @@ textarea.bk-field {
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
   }
 
-  .app-tabs {
-    padding: 0 8px;
+  .app-tabs,
+  .bookmarks-bar {
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .app-home {

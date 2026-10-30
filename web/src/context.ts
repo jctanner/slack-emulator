@@ -16,7 +16,7 @@ export type DialogKind =
   | { kind: 'create-channel' }
   | { kind: 'browse-channels' }
   | { kind: 'new-message' }
-  | { kind: 'channel-details'; channel: string; tab?: 'about' | 'members' | 'settings' }
+  | { kind: 'channel-details'; channel: string; tab?: 'about' | 'members' | 'pinned' | 'settings' }
   | { kind: 'connection' }
 
 export const WorkspaceContext = createContext<WorkspaceCtx | null>(null)

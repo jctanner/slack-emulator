@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Conversation } from './api'
 import { AboutTab, AppTabs, HomeTab, useAppDm, useTabOpened, type AppTab } from './AppHome'
+import { BookmarksBar } from './Bookmarks'
 import { Composer, TypingIndicator } from './Composer'
 import { useWs } from './context'
 import { MessageList } from './MessageList'
@@ -17,7 +18,13 @@ export function ChannelView({ channel }: { channel: string }) {
   const users = useWorkspace(store, (s) => s.users)
   const convs = useWorkspace(store, (s) => s.convs)
   const [error, setError] = useState<string>()
-  const [highlight] = useState(() => queryParam('ts'))
+  const [highlight, setHighlight] = useState(() => queryParam('ts'))
+  // Jumping to a message in this channel (e.g. from pinned items) changes only `?ts=`.
+  useEffect(() => {
+    const onNav = () => setHighlight(queryParam('ts'))
+    window.addEventListener('popstate', onNav)
+    return () => window.removeEventListener('popstate', onNav)
+  }, [])
   const msgs = useMemo(
     () => mergeMessages(list?.msgs ?? [], (ephemerals ?? []).filter((m) => !m.thread_ts || m.thread_ts === m.ts)),
     [list?.msgs, ephemerals],
@@ -73,7 +80,7 @@ export function ChannelView({ channel }: { channel: string }) {
   const name = convName(conv, { users, me: store.state.me })
   const isDm = conv.is_im || conv.is_mpim
   const ctx = { me: store.state.me, users, convs, onChannel: (id: string) => ws.open(id) }
-  const details = (tab?: 'about' | 'members' | 'settings') => ws.showDialog({ kind: 'channel-details', channel, tab })
+  const details = (tab?: 'about' | 'members' | 'pinned' | 'settings') => ws.showDialog({ kind: 'channel-details', channel, tab })
 
   const join = async () => {
     try {
@@ -137,6 +144,7 @@ export function ChannelView({ channel }: { channel: string }) {
         )}
       </header>
       {conv.is_archived && <div className="archived-banner">You’re viewing an archived channel.</div>}
+      {!app && <BookmarksBar channel={channel} canEdit={!!conv.is_member && !conv.is_archived} />}
       {app && <AppTabs app={app} tab={tab} onTab={setTab} />}
       {app && tab === 'home' ? (
         <HomeTab app={app} />

@@ -196,6 +196,7 @@ pub fn event_scopes(event: &str) -> Option<&'static [&'static str]> {
         "group_rename" | "group_archive" | "group_unarchive" | "group_deleted" | "group_left" => &["groups:read"],
         "im_created" => &["im:read"],
         "file_shared" | "file_created" | "file_deleted" | "file_change" => &["files:read"],
+        "pin_added" | "pin_removed" => &["pins:read"],
         "team_join" | "user_change" => &["users:read"],
         "app_home_opened" | "app_uninstalled" | "tokens_revoked" | "app_rate_limited" => return None,
         _ => return Some(&[]),

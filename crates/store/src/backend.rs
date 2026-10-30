@@ -15,8 +15,8 @@ macro_rules! sql_store {
         use serde_json::Value;
         use slack_emu_core::ids::{IdKind, TokenKind, new_id, new_internal_id};
         use slack_emu_core::models::{
-            Account, ApiToken, App, Conversation, ConversationCounts, File, FileShare, Message, NewConversation,
-            NewUser, Reaction, ThreadSummary, Topic, User, Workspace,
+            Account, ApiToken, App, Bookmark, Conversation, ConversationCounts, File, FileShare, Message, NewConversation,
+            NewUser, Pin, Reaction, ThreadSummary, Topic, User, Workspace,
         };
         use slack_emu_core::now;
         use sqlx::{Arguments, Row};
@@ -164,6 +164,29 @@ macro_rules! sql_store {
                 edited_ts: r.get("edited_ts"),
                 edited_by: r.get("edited_by"),
                 file_ids: split_list(&r.get::<String, _>("file_ids")),
+            }
+        }
+
+        fn pin_row(r: $row) -> Pin {
+            Pin {
+                channel_id: r.get("channel_id"),
+                ts: r.get("ts"),
+                pinned_by: r.get("pinned_by"),
+                created: r.get("created"),
+            }
+        }
+
+        fn bookmark_row(r: $row) -> Bookmark {
+            Bookmark {
+                id: r.get("id"),
+                channel_id: r.get("channel_id"),
+                title: r.get("title"),
+                link: r.get("link"),
+                emoji: r.get("emoji"),
+                app_id: r.get("app_id"),
+                created: r.get("created"),
+                updated: r.get("updated"),
+                updated_by: r.get("updated_by"),
             }
         }
 
@@ -607,6 +630,8 @@ macro_rules! sql_store {
                 for table in [
                     "sessions",
                     "identities",
+                    "pins",
+                    "bookmarks",
                     "file_shares",
                     "file_contents",
                     "files",
@@ -1259,6 +1284,113 @@ macro_rules! sql_store {
                         channel_id: r.get("channel_id"),
                         ts: r.get("ts"),
                     })
+                    .collect())
+            }
+
+            async fn add_pin(&self, p: &Pin) -> Result<bool> {
+                let r = sqlx::query(prep(
+                    "INSERT INTO pins (channel_id, ts, pinned_by, created) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+                ))
+                .bind(&p.channel_id)
+                .bind(&p.ts)
+                .bind(&p.pinned_by)
+                .bind(p.created)
+                .execute(&self.pool)
+                .await?;
+                Ok(r.rows_affected() > 0)
+            }
+
+            async fn remove_pin(&self, channel_id: &str, ts: &str) -> Result<bool> {
+                let r = sqlx::query(prep("DELETE FROM pins WHERE channel_id = ? AND ts = ?"))
+                    .bind(channel_id)
+                    .bind(ts)
+                    .execute(&self.pool)
+                    .await?;
+                Ok(r.rows_affected() > 0)
+            }
+
+            async fn pins(&self, channel_id: &str) -> Result<Vec<Pin>> {
+                Ok(sqlx::query(prep("SELECT * FROM pins WHERE channel_id = ? ORDER BY created, ts"))
+                    .bind(channel_id)
+                    .fetch_all(&self.pool)
+                    .await?
+                    .into_iter()
+                    .map(pin_row)
+                    .collect())
+            }
+
+            async fn pinned(&self, channel_id: &str, ts: &[String]) -> Result<Vec<String>> {
+                if ts.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let sql = format!(
+                    "SELECT ts FROM pins WHERE channel_id = ? AND ts IN ({})",
+                    placeholders(ts.len())
+                );
+                let mut q = sqlx::query_scalar(prep(&sql)).bind(channel_id);
+                for t in ts {
+                    q = q.bind(t);
+                }
+                Ok(q.fetch_all(&self.pool).await?)
+            }
+
+            async fn add_bookmark(&self, b: &Bookmark) -> Result<()> {
+                sqlx::query(prep(
+                    "INSERT INTO bookmarks (id, channel_id, title, link, emoji, app_id, created, updated, updated_by)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ))
+                .bind(&b.id)
+                .bind(&b.channel_id)
+                .bind(&b.title)
+                .bind(&b.link)
+                .bind(&b.emoji)
+                .bind(&b.app_id)
+                .bind(b.created)
+                .bind(b.updated)
+                .bind(&b.updated_by)
+                .execute(&self.pool)
+                .await?;
+                Ok(())
+            }
+
+            async fn get_bookmark(&self, id: &str) -> Result<Option<Bookmark>> {
+                Ok(sqlx::query(prep("SELECT * FROM bookmarks WHERE id = ?"))
+                    .bind(id)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .map(bookmark_row))
+            }
+
+            async fn update_bookmark(&self, b: &Bookmark) -> Result<()> {
+                sqlx::query(prep(
+                    "UPDATE bookmarks SET title = ?, link = ?, emoji = ?, updated = ?, updated_by = ? WHERE id = ?",
+                ))
+                .bind(&b.title)
+                .bind(&b.link)
+                .bind(&b.emoji)
+                .bind(b.updated)
+                .bind(&b.updated_by)
+                .bind(&b.id)
+                .execute(&self.pool)
+                .await?;
+                Ok(())
+            }
+
+            async fn remove_bookmark(&self, id: &str) -> Result<()> {
+                sqlx::query(prep("DELETE FROM bookmarks WHERE id = ?"))
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+                Ok(())
+            }
+
+            async fn bookmarks(&self, channel_id: &str) -> Result<Vec<Bookmark>> {
+                Ok(sqlx::query(prep("SELECT * FROM bookmarks WHERE channel_id = ? ORDER BY created, id"))
+                    .bind(channel_id)
+                    .fetch_all(&self.pool)
+                    .await?
+                    .into_iter()
+                    .map(bookmark_row)
                     .collect())
             }
 

@@ -421,6 +421,14 @@ docs/
   - Clients refresh their slash command and shortcut lists when apps
     change: install and uninstall (`user_change` for the bot user) and edits
     on the Apps page.
+- Milestone 7, pins and bookmarks (2026-10-29):
+  - Pinning posts Slack's `pinned_item` system message and fires
+    `pin_added` (`pins:read`). Unpinning fires `pin_removed` and posts
+    nothing. Messages show `pinned_to`. The limit is 100 pins per
+    conversation, and system messages can't be pinned (`not_pinnable`).
+  - Bookmarks are links only (`type: link`, http or https). Slack has no
+    public bookmark events, so clients refresh through the UI-only
+    `emu_bookmarks_changed`.
 - `client.counts` (an undocumented method from Slack's own web client) drives
   the unread state in the sidebar. Events Slack doesn't have are prefixed
   `emu_` and are never delivered to apps.

@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use serde_json::Value;
 use slack_emu_core::models::{
-    Account, ApiToken, App, Conversation, ConversationCounts, ConversationTypes, File, FileShare, Message,
-    NewConversation, NewUser, Reaction, ThreadSummary, User, Workspace,
+    Account, ApiToken, App, Bookmark, Conversation, ConversationCounts, ConversationTypes, File, FileShare, Message,
+    NewConversation, NewUser, Pin, Reaction, ThreadSummary, User, Workspace,
 };
 
 pub use postgres::{PgStore, fresh_test_database};
@@ -192,6 +192,25 @@ pub trait Store: Send + Sync + 'static {
     async fn list_files(&self, team_id: &str) -> Result<Vec<File>>;
     async fn add_file_share(&self, share: &FileShare) -> Result<()>;
     async fn file_shares(&self, file_ids: &[String]) -> Result<Vec<FileShare>>;
+
+    // Pins
+    /// Returns false if it was already pinned.
+    async fn add_pin(&self, pin: &Pin) -> Result<bool>;
+    /// Returns false if it wasn't pinned.
+    async fn remove_pin(&self, channel_id: &str, ts: &str) -> Result<bool>;
+    /// A channel's pins, oldest first.
+    async fn pins(&self, channel_id: &str) -> Result<Vec<Pin>>;
+    /// Which of these messages are pinned.
+    async fn pinned(&self, channel_id: &str, ts: &[String]) -> Result<Vec<String>>;
+
+    // Bookmarks
+    async fn add_bookmark(&self, bookmark: &Bookmark) -> Result<()>;
+    async fn get_bookmark(&self, id: &str) -> Result<Option<Bookmark>>;
+    /// Saves title, link, emoji and who updated it when.
+    async fn update_bookmark(&self, bookmark: &Bookmark) -> Result<()>;
+    async fn remove_bookmark(&self, id: &str) -> Result<()>;
+    /// A channel's bookmarks, oldest first.
+    async fn bookmarks(&self, channel_id: &str) -> Result<Vec<Bookmark>>;
 
     // Reactions
     /// Returns false if the user had already reacted with that emoji.

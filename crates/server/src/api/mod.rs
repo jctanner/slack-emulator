@@ -13,6 +13,7 @@ pub(crate) mod files;
 mod inspector;
 mod interactive;
 mod methods;
+mod pins;
 mod reactions;
 pub mod shapes;
 mod users;
