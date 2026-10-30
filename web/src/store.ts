@@ -416,6 +416,15 @@ export class WorkspaceStore {
         this.set((st) => ({ usergroups: { ...st.usergroups, [g.id]: { ...g, users, user_count: users.length } } }))
         return
       }
+      case 'emu_history_pruned':
+        // Retention removed old messages: drop what's loaded so views refetch.
+        this.set((st) => {
+          const channels = { ...st.channels }
+          delete channels[ev.channel]
+          const threads = Object.fromEntries(Object.entries(st.threads).filter(([k]) => !k.startsWith(`${ev.channel}/`)))
+          return { channels, threads }
+        })
+        return
       case 'emu_bookmarks_changed':
         this.set((st) => ({ bookmarksVersion: { ...st.bookmarksVersion, [ev.channel]: (st.bookmarksVersion[ev.channel] ?? 0) + 1 } }))
         return

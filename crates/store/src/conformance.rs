@@ -531,6 +531,49 @@ pub(crate) async fn search(s: &dyn Store) {
     );
 }
 
+pub(crate) async fn retention(s: &dyn Store) {
+    let ws = s.create_workspace("Acme", "acme").await.unwrap();
+    let a = s.create_user(new_user(&ws.id, "a")).await.unwrap();
+    let c = s
+        .create_conversation(channel(&ws.id, "chat", false), std::slice::from_ref(&a.id))
+        .await
+        .unwrap();
+    s.set_retention(&ws.id, &ws.id, Some(30)).await.unwrap();
+    s.set_retention(&ws.id, &c.id, Some(7)).await.unwrap();
+    s.set_retention(&ws.id, &c.id, Some(1)).await.unwrap();
+    let mut policies = s.retention_policies().await.unwrap();
+    policies.sort();
+    let mut want = vec![(ws.id.clone(), ws.id.clone(), 30), (ws.id.clone(), c.id.clone(), 1)];
+    want.sort();
+    assert_eq!(policies, want);
+    s.set_retention(&ws.id, &ws.id, None).await.unwrap();
+    assert_eq!(s.retention_policies().await.unwrap().len(), 1);
+    assert_eq!(s.conversation_ids(&ws.id).await.unwrap(), std::slice::from_ref(&c.id));
+
+    // Old: a plain message, a thread whose replies are all old, and a
+    // parent whose thread continues past the cutoff.
+    for (ts, text, thread) in [
+        ("1000000001.000000", "old", None),
+        ("1000000002.000000", "old parent", None),
+        ("1000000003.000000", "old reply", Some("1000000002.000000")),
+        ("1000000004.000000", "busy parent", None),
+        ("1000000005.000000", "old busy reply", Some("1000000004.000000")),
+        ("2000000001.000000", "new reply", Some("1000000004.000000")),
+        ("2000000002.000000", "new", None),
+    ] {
+        s.insert_message(&msg(&c.id, ts, &a.id, text, thread)).await.unwrap();
+    }
+    assert_eq!(s.prune_messages(&c.id, "1500000000.000000").await.unwrap(), 4);
+    let left = s.history(&c.id, &TsRange::default(), 10).await.unwrap();
+    let texts: Vec<(&str, Option<&str>)> = left.iter().map(|m| (m.text.as_str(), m.subtype.as_deref())).collect();
+    assert_eq!(texts, [("new", None), ("This message was deleted.", Some("tombstone"))]);
+    let thread = s
+        .replies(&c.id, "1000000004.000000", &TsRange::default(), 10)
+        .await
+        .unwrap();
+    assert_eq!(thread.len(), 2, "the tombstoned parent and its live reply");
+}
+
 /// Declares one `#[tokio::test]` per conformance check, each with a store
 /// from `$make` (an `Option`: `None` skips, e.g. when no Postgres is configured).
 macro_rules! suite {
@@ -569,6 +612,11 @@ macro_rules! suite {
         async fn search() {
             let Some(s) = $make else { return };
             $crate::conformance::search(&s).await;
+        }
+        #[tokio::test]
+        async fn retention() {
+            let Some(s) = $make else { return };
+            $crate::conformance::retention(&s).await;
         }
         #[tokio::test]
         async fn sessions_expire() {

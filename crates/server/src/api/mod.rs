@@ -15,6 +15,7 @@ mod interactive;
 mod methods;
 mod pins;
 mod reactions;
+mod retention;
 mod scheduled;
 mod search;
 pub mod shapes;

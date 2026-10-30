@@ -5,8 +5,8 @@ use slack_emu_core::SlackError;
 use slack_emu_core::ids::TokenKind;
 
 use super::{
-    ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, pins, reactions, scheduled,
-    search, usergroups, users, views,
+    ApiResult, Args, Caller, apps, chat, conversations, files, inspector, interactive, pins, reactions, retention,
+    scheduled, search, usergroups, users, views,
 };
 use crate::AppState;
 
@@ -63,6 +63,12 @@ const METHODS: &[MethodSpec] = &[
         callers: Callers::Anyone,
         scopes: &[],
     },
+    people("admin.conversations.getCustomRetention", &["admin.conversations:read"]),
+    people(
+        "admin.conversations.removeCustomRetention",
+        &["admin.conversations:write"],
+    ),
+    people("admin.conversations.setCustomRetention", &["admin.conversations:write"]),
     MethodSpec {
         name: "apps.connections.open",
         callers: Callers::AppToken,
@@ -124,6 +130,8 @@ const METHODS: &[MethodSpec] = &[
     session("emu.inspector.deliveries"),
     session("emu.inspector.events"),
     session("emu.commands.list"),
+    session("emu.retention.get"),
+    session("emu.retention.set"),
     session("emu.shortcuts.list"),
     session("emu.shortcuts.run"),
     session("emu.views.close"),
@@ -186,6 +194,9 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
     caller.require_scope(spec.scopes)?;
     let (s, c, a) = (state, &caller, &args);
     match method {
+        "admin.conversations.getCustomRetention" => retention::get_custom(s, c, a).await,
+        "admin.conversations.removeCustomRetention" => retention::remove_custom(s, c, a).await,
+        "admin.conversations.setCustomRetention" => retention::set_custom(s, c, a).await,
         "apps.connections.open" => apps::connections_open(s, c, a).await,
         "apps.manifest.create" => apps::manifest_create(s, c, a).await,
         "apps.manifest.delete" => apps::manifest_delete(s, c, a).await,
@@ -243,6 +254,8 @@ pub async fn call(state: &AppState, method: &str, caller: Option<Caller>, args: 
         "emu.inspector.deliveries" => inspector::deliveries(s, c, a).await,
         "emu.inspector.events" => inspector::events(s, c, a).await,
         "emu.commands.list" => interactive::commands_list(s, c, a).await,
+        "emu.retention.get" => retention::get(s, c, a).await,
+        "emu.retention.set" => retention::set(s, c, a).await,
         "emu.shortcuts.list" => interactive::shortcuts_list(s, c, a).await,
         "emu.shortcuts.run" => interactive::shortcut_run(s, c, a).await,
         "emu.views.close" => interactive::view_close(s, c, a).await,

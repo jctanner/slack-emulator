@@ -8,6 +8,7 @@ pub mod events;
 pub mod harness;
 pub mod interactions;
 pub mod ratelimit;
+pub mod retention;
 pub mod scheduler;
 pub mod services;
 mod socket_mode;
@@ -73,6 +74,7 @@ impl AppState {
         };
         delivery::spawn_dispatcher(state.clone());
         scheduler::spawn(state.clone());
+        retention::spawn(state.clone());
         state
             .ensure_default_workspace()
             .await

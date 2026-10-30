@@ -20,6 +20,8 @@ export function Dialogs({ dialog, onClose }: { dialog: DialogKind; onClose: () =
       return <ConnectionDetails onClose={onClose} />
     case 'usergroups':
       return <UserGroups onClose={onClose} />
+    case 'workspace-settings':
+      return <WorkspaceSettings onClose={onClose} />
   }
 }
 
@@ -420,6 +422,7 @@ function ChannelDetails({
               {name !== conv.name && <button onClick={() => act('conversations.rename', { name })}>Rename</button>}
             </div>
           </label>
+          <ChannelRetention channel={channel} />
           <div className="danger-zone">
             {conv.is_member && !conv.is_general && !conv.is_archived && (
               <button
@@ -647,6 +650,108 @@ function UserGroups({ onClose }: { onClose: () => void }) {
           {note && <p className="ok small">{note}</p>}
         </div>
       </div>
+    </Modal>
+  )
+}
+
+/** "Keep forever" or a number of days, as an editable pair. */
+function RetentionInput({ days, onSave, inheritLabel }: { days: number | null; onSave: (days: number | null) => Promise<void>; inheritLabel: string }) {
+  const [mode, setMode] = useState<'inherit' | 'days'>(days ? 'days' : 'inherit')
+  const [value, setValue] = useState(String(days ?? 30))
+  const [saved, setSaved] = useState<string>()
+  useEffect(() => {
+    setMode(days ? 'days' : 'inherit')
+    setValue(String(days ?? 30))
+  }, [days])
+  const changed = (mode === 'inherit') !== !days || (mode === 'days' && Number(value) !== days)
+  return (
+    <div className="retention-input">
+      <select value={mode} onChange={(e) => setMode(e.target.value as 'inherit' | 'days')} aria-label="Retention">
+        <option value="inherit">{inheritLabel}</option>
+        <option value="days">Delete messages after…</option>
+      </select>
+      {mode === 'days' && (
+        <>
+          <input type="number" min={1} value={value} onChange={(e) => setValue(e.target.value)} aria-label="Days" /> days
+        </>
+      )}
+      {changed && (
+        <button
+          className="primary-small"
+          disabled={mode === 'days' && !(Number(value) >= 1)}
+          onClick={() => onSave(mode === 'days' ? Number(value) : null).then(() => setSaved('Saved.'))}
+        >
+          Save
+        </button>
+      )}
+      {saved && !changed && <span className="ok small">{saved}</span>}
+    </div>
+  )
+}
+
+/** A conversation's own retention policy (admins). */
+function ChannelRetention({ channel }: { channel: string }) {
+  const { store, membership } = useWs()
+  const me = useWorkspace(store, (s) => s.users[s.me])
+  const [days, setDays] = useState<number | null>()
+  const [error, setError] = useState<string>()
+  const admin = !!(me?.is_admin || me?.is_owner)
+  useEffect(() => {
+    if (!admin) return
+    store
+      .call<{ is_policy_enabled: boolean; duration_days: number }>('admin.conversations.getCustomRetention', { channel_id: channel })
+      .then((r) => setDays(r.is_policy_enabled ? r.duration_days : null), (e) => setError(errorText(e)))
+  }, [channel, admin, store])
+  if (!admin || days === undefined) return null
+  const save = async (d: number | null) => {
+    setError(undefined)
+    try {
+      if (d) await store.call('admin.conversations.setCustomRetention', { channel_id: channel, duration_days: d })
+      else await store.call('admin.conversations.removeCustomRetention', { channel_id: channel })
+      setDays(d)
+    } catch (e) {
+      setError(errorText(e))
+      throw e
+    }
+  }
+  return (
+    <div className="retention">
+      <h2>Message retention</h2>
+      <RetentionInput days={days} onSave={save} inheritLabel={`Use the ${membership.team.name} default`} />
+      {error && <p className="error">{error}</p>}
+    </div>
+  )
+}
+
+/** Workspace-wide settings for admins: the default message retention. */
+function WorkspaceSettings({ onClose }: { onClose: () => void }) {
+  const { store, membership } = useWs()
+  const [days, setDays] = useState<number | null>()
+  const [error, setError] = useState<string>()
+  useEffect(() => {
+    store
+      .call<{ workspace_days: number | null }>('emu.retention.get')
+      .then((r) => setDays(r.workspace_days), (e) => setError(errorText(e)))
+  }, [store])
+  const save = async (d: number | null) => {
+    setError(undefined)
+    try {
+      await store.call('emu.retention.set', { days: d ?? 0 })
+      setDays(d)
+    } catch (e) {
+      setError(errorText(e))
+      throw e
+    }
+  }
+  return (
+    <Modal title={`${membership.team.name} settings`} onClose={onClose}>
+      <h2>Message retention</h2>
+      <p className="muted small">
+        Messages older than this are deleted, checked every minute. Channels can override it in their settings. Thread
+        parents with newer replies are kept as “deleted” placeholders.
+      </p>
+      {days !== undefined && <RetentionInput days={days} onSave={save} inheritLabel="Keep messages forever" />}
+      {error && <p className="error">{error}</p>}
     </Modal>
   )
 }

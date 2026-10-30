@@ -1670,6 +1670,36 @@ button.primary-small {
 
 /* ---------- mobile: one pane at a time ---------- */
 
+/* ---------- retention ---------- */
+
+.retention-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.retention-input select,
+.card .retention-input input {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.card .retention-input input {
+  display: inline-block;
+  width: 80px;
+  margin: 0;
+}
+
+.retention {
+  margin: 8px 0 16px;
+}
+
 /* ---------- search ---------- */
 
 .sidebar-search {

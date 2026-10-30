@@ -297,10 +297,12 @@ docs/
 5. **Harness**: `/_emu/*` (seed, reset, logs, act-as, wait), Inspector
    UI, rate-limit emulation.
 6. **Postgres**: second Store impl, CI matrix.
-7. **Later**: files, OAuth app install flow, OIDC login, search, pins,
-   bookmarks, scheduled messages, shortcuts, user groups, message retention
-   policies (workspace default plus per-channel override, mirroring Slack's
-   admin setting and `admin.conversations.*CustomRetention`).
+7. **Extras** (done): files, pins, bookmarks, scheduled messages,
+   shortcuts, `external_select` options, user groups, search, and message
+   retention policies (workspace default plus per-channel override,
+   mirroring Slack's admin setting and `admin.conversations.*CustomRetention`).
+8. **Later**: an OAuth app install flow and OIDC sign-in (deferred,
+   2026-10-29).
 
 ## Decisions log
 
@@ -459,6 +461,17 @@ docs/
   - Search is for people: the web UI and user tokens with `search:read`.
     Methods can now be marked "people only" in the method table, so bot
     tokens get `not_allowed_token_type` before any scope check.
+- Milestone 7, retention (2026-10-29):
+  - Policies are a number of days, at least one: a workspace default (set
+    by admins in the UI, `emu.retention.*`) and per-conversation overrides
+    (`admin.conversations.*CustomRetention`, also admins only, for people
+    or user tokens with the `admin.conversations:*` scopes). Without a
+    policy, messages are kept forever.
+  - A sweep runs every minute. Thread parents with replies still inside
+    the window become tombstones, so threads stay reachable. Apps get no
+    events, as on Slack; open web clients reload the conversation. Files
+    aren't covered (Slack's separate file retention isn't emulated).
+- The OAuth install flow and OIDC sign-in are deferred (2026-10-29).
 - `client.counts` (an undocumented method from Slack's own web client) drives
   the unread state in the sidebar. Events Slack doesn't have are prefixed
   `emu_` and are never delivered to apps.

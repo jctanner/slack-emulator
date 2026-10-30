@@ -661,6 +661,7 @@ macro_rules! sql_store {
                 for table in [
                     "sessions",
                     "identities",
+                    "retention_policies",
                     "usergroup_members",
                     "usergroups",
                     "scheduled_messages",
@@ -1625,6 +1626,74 @@ macro_rules! sql_store {
                 .bind(id)
                 .fetch_all(&self.pool)
                 .await?)
+            }
+
+            async fn set_retention(&self, team_id: &str, target_id: &str, days: Option<i64>) -> Result<()> {
+                match days {
+                    Some(days) => {
+                        sqlx::query(prep(
+                            "INSERT INTO retention_policies (target_id, team_id, days) VALUES (?, ?, ?)
+                             ON CONFLICT (target_id) DO UPDATE SET days = excluded.days",
+                        ))
+                        .bind(target_id)
+                        .bind(team_id)
+                        .bind(days)
+                        .execute(&self.pool)
+                        .await?;
+                    }
+                    None => {
+                        sqlx::query(prep("DELETE FROM retention_policies WHERE target_id = ?"))
+                            .bind(target_id)
+                            .execute(&self.pool)
+                            .await?;
+                    }
+                }
+                Ok(())
+            }
+
+            async fn retention_policies(&self) -> Result<Vec<(String, String, i64)>> {
+                Ok(sqlx::query(prep("SELECT team_id, target_id, days FROM retention_policies ORDER BY team_id, target_id"))
+                    .fetch_all(&self.pool)
+                    .await?
+                    .into_iter()
+                    .map(|r| (r.get("team_id"), r.get("target_id"), r.get("days")))
+                    .collect())
+            }
+
+            async fn conversation_ids(&self, team_id: &str) -> Result<Vec<String>> {
+                Ok(sqlx::query_scalar(prep("SELECT id FROM conversations WHERE team_id = ? ORDER BY id"))
+                    .bind(team_id)
+                    .fetch_all(&self.pool)
+                    .await?)
+            }
+
+            async fn prune_messages(&self, channel_id: &str, before: &str) -> Result<u64> {
+                let mut tx = self.pool.begin().await?;
+                let deleted = sqlx::query(prep(
+                    "DELETE FROM messages WHERE channel_id = ? AND ts < ?
+                       AND NOT EXISTS (SELECT 1 FROM messages r
+                                       WHERE r.channel_id = messages.channel_id AND r.thread_ts = messages.ts
+                                         AND r.ts <> messages.ts AND r.ts >= ?)",
+                ))
+                .bind(channel_id)
+                .bind(before)
+                .bind(before)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected();
+                // What's left before the cutoff are parents of live threads.
+                sqlx::query(prep(
+                    "UPDATE messages SET subtype = 'tombstone', text = 'This message was deleted.', user_id = 'USLACKBOT',
+                                         bot_id = NULL, app_id = NULL, blocks = NULL, attachments = NULL, file_ids = '',
+                                         edited_ts = NULL, edited_by = NULL
+                     WHERE channel_id = ? AND ts < ? AND (subtype IS NULL OR subtype <> 'tombstone')",
+                ))
+                .bind(channel_id)
+                .bind(before)
+                .execute(&mut *tx)
+                .await?;
+                tx.commit().await?;
+                Ok(deleted)
             }
 
             async fn add_reaction(&self, channel_id: &str, ts: &str, name: &str, user_id: &str) -> Result<bool> {

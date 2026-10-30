@@ -6,7 +6,7 @@ use it through a Slack-like web UI in any desktop or mobile browser.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the architecture and roadmap.
 
-**Status: milestone 7 in progress (files, external selects, shortcuts, pins, bookmarks, scheduled messages, user groups and search done).** Accounts and multiple workspaces;
+**Status: milestone 7 (files, external selects, shortcuts, pins, bookmarks, scheduled messages, user groups, search and message retention).** Accounts and multiple workspaces;
 public and private channels, DMs and group DMs, threads, reactions, unread
 tracking and live updates in a responsive web UI. Apps are created from Slack
 app manifests and installed for bot tokens with enforced scopes. Events are
@@ -23,6 +23,7 @@ live Inspector in the UI.
 Web API methods:
 
 - `api.test`, `auth.test`, `auth.revoke`, `team.info`, `bots.info`
+- `admin.conversations.setCustomRetention|getCustomRetention|removeCustomRetention`
 - `bookmarks.add|edit|list|remove`, `pins.add|list|remove`
 - `apps.connections.open`, `apps.manifest.create|update|delete|export|validate`
 - `chat.postMessage`, `chat.postEphemeral`, `chat.update`, `chat.delete`, `chat.meMessage`, `chat.getPermalink`
@@ -78,8 +79,12 @@ Search (the box at the top of the sidebar) covers messages and files, with
 Slack's `in:`, `from:`, `before:`/`after:`/`on:`, `has:link`, `has:pin`,
 `is:thread` and quoted phrases.
 
-Still to do in milestone 7: the OAuth install flow, OIDC sign-in and message
-retention policies (see
+Workspace admins can set how long messages are kept (account menu →
+Workspace settings), and override it per channel (channel settings, or
+`admin.conversations.setCustomRetention`). By default messages are kept
+forever.
+
+Later: an OAuth app install flow and OIDC sign-in (see
 [the roadmap](docs/DESIGN.md#milestones)).
 
 ## Run it

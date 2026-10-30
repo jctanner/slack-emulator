@@ -251,6 +251,18 @@ pub trait Store: Send + Sync + 'static {
     /// Members of a group, sorted by user ID.
     async fn usergroup_members(&self, id: &str) -> Result<Vec<String>>;
 
+    // Retention
+    /// Sets (or with `None`, removes) the policy for a workspace or conversation.
+    async fn set_retention(&self, team_id: &str, target_id: &str, days: Option<i64>) -> Result<()>;
+    /// Every policy, as (team, target, days).
+    async fn retention_policies(&self) -> Result<Vec<(String, String, i64)>>;
+    /// IDs of a workspace's conversations.
+    async fn conversation_ids(&self, team_id: &str) -> Result<Vec<String>>;
+    /// Deletes a conversation's messages older than `before` (a ts). Thread
+    /// parents with newer replies become tombstones instead. Returns how
+    /// many messages were deleted.
+    async fn prune_messages(&self, channel_id: &str, before: &str) -> Result<u64>;
+
     // Reactions
     /// Returns false if the user had already reacted with that emoji.
     async fn add_reaction(&self, channel_id: &str, ts: &str, name: &str, user_id: &str) -> Result<bool>;

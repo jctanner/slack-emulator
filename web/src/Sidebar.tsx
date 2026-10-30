@@ -94,6 +94,11 @@ export function Sidebar({
               <button role="menuitem" onClick={() => showDialog({ kind: 'usergroups' })}>
                 User groups
               </button>
+              {(users[user.id]?.is_admin || users[user.id]?.is_owner) && (
+                <button role="menuitem" onClick={() => showDialog({ kind: 'workspace-settings' })}>
+                  Workspace settings
+                </button>
+              )}
               <button role="menuitem" onClick={() => showDialog({ kind: 'connection' })}>
                 Connection details
               </button>
