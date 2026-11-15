@@ -4,3 +4,7 @@ web/node_modules
 web/dist
 *.db
 *.db-*
+
+# Python release-workflow test bytecode
+__pycache__/
+*.pyc
